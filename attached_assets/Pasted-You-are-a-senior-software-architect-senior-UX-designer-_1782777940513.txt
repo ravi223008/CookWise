@@ -1,0 +1,270 @@
+You are a senior software architect, senior UX designer and senior full-stack engineer.
+
+Build a production-quality mobile-first web application called CookWise.
+
+CookWise is NOT a recipe app.
+
+CookWise is an AI Dinner Decision Assistant.
+
+Its mission is:
+
+"Remove the daily stress of deciding what to cook."
+
+The app should have a premium Apple-level UI with beautiful animations, rounded cards, smooth transitions, soft shadows and elegant typography.
+
+Color palette:
+- Sage Green
+- Cream
+- White
+- Warm Orange Accent
+
+Responsive design.
+
+Use:
+
+React
+TypeScript
+Tailwind CSS
+Node.js
+Express
+OpenAI API (keep provider configurable)
+YouTube API
+Supabase for database and authentication.
+
+----------------------------------
+
+HOME SCREEN
+
+Large greeting.
+
+Example:
+
+Good Evening Ravi 👋
+
+Instead of showing recipes...
+
+Show ONE recommendation.
+
+Example:
+
+🍽 Tonight's Recommendation
+
+Creamy Butter Chicken
+
+97% Match
+
+Ready in 25 minutes
+
+[Cook Now]
+
+Below that
+
+Large button
+
+🍽 Decide My Dinner
+
+----------------------------------
+
+FEATURES
+
+1.
+
+Decide My Dinner
+
+User can
+
+- type ingredients
+- voice ingredients
+- upload fridge image
+
+AI recommends ONE best meal.
+
+----------------------------------
+
+2.
+
+YouTube Integration
+
+Show best cooking video.
+
+----------------------------------
+
+3.
+
+Smart Grocery
+
+Show only missing ingredients.
+
+----------------------------------
+
+4.
+
+Pantry
+
+Store ingredients.
+
+----------------------------------
+
+5.
+
+Leftover Mode
+
+User enters leftovers.
+
+AI creates meals.
+
+----------------------------------
+
+6.
+
+Family Mode
+
+Multiple profiles.
+
+Dad
+
+Mom
+
+Kids
+
+AI learns preferences.
+
+Never recommend meals recently cooked.
+
+----------------------------------
+
+7.
+
+AI Kitchen Memory
+
+Remember
+
+favorite meals
+
+allergies
+
+budget
+
+family size
+
+weather
+
+expiry dates
+
+shopping history
+
+cooking history
+
+preferred cuisines
+
+----------------------------------
+
+8.
+
+Mood Mode
+
+Buttons
+
+😴 Tired
+
+❤️ Romantic
+
+💰 Budget
+
+🏋 High Protein
+
+🥗 Healthy
+
+👶 Kids
+
+🎉 Guests
+
+AI changes recommendation.
+
+----------------------------------
+
+9.
+
+Receipt Scanner
+
+User scans supermarket receipt.
+
+Automatically update pantry.
+
+----------------------------------
+
+10.
+
+Weekly Meal Planner
+
+AI generates 7-day meal plan.
+
+----------------------------------
+
+11.
+
+Notifications
+
+Every day around dinner time
+
+Good evening 👋
+
+I already picked dinner.
+
+----------------------------------
+
+Design Philosophy
+
+Minimal.
+
+Apple quality.
+
+No clutter.
+
+One action per screen.
+
+Large typography.
+
+Large cards.
+
+Beautiful animations.
+
+----------------------------------
+
+Folder Structure
+
+frontend
+
+backend
+
+database
+
+components
+
+hooks
+
+services
+
+types
+
+utils
+
+----------------------------------
+
+Code Quality
+
+Production ready.
+
+Reusable components.
+
+Clean architecture.
+
+Strong typing.
+
+No duplicated code.
+
+Responsive.
+
+Document everything.
+
+Generate the complete project.
