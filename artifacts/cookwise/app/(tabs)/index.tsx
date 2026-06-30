@@ -180,16 +180,10 @@ export default function HomeScreen() {
           entering={FadeInDown.delay(160).springify().damping(20)}
           style={styles.section}
         >
-          <View style={styles.sectionRow}>
-            <Ionicons name="sparkles" size={15} color={colors.primary} />
-            <Text style={[styles.sectionLabelPrimary, { color: colors.foreground }]}>
-              Tonight's Recommendation
-            </Text>
-          </View>
 
-          {isLoadingRecommendation ? (
+          {isLoadingRecommendation? (
             <RecommendationCardSkeleton />
-          ) : tonightsMeal ? (
+          ): tonight's meal? (
             <RecommendationCard
               meal={tonightsMeal}
               onCookNow={handleCookNow}
