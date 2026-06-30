@@ -6,17 +6,20 @@
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "cookwise",
-    "userInterfaceStyle": "automatic",
+    "userInterfaceStyle": "light",
     "newArchEnabled": true,
     "splash": {
       "image": "./assets/images/icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#ffffff"
+      "backgroundColor": "#FDFAF4"
     },
     "ios": {
-      "supportsTablet": false
+      "supportsTablet": false,
+      "bundleIdentifier": "com.cookwise.app"
     },
-    "android": {},
+    "android": {
+      "package": "com.cookwise.app"
+    },
     "web": {
       "favicon": "./assets/images/icon.png"
     },

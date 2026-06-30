@@ -6,6 +6,7 @@ import {
   useFonts,
 } from "@expo-google-fonts/inter";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { setBaseUrl } from "@workspace/api-client-react";
 import { Stack } from "expo-router";
 import * as SplashScreen from "expo-splash-screen";
 import React, { useEffect } from "react";
@@ -14,8 +15,14 @@ import { KeyboardProvider } from "react-native-keyboard-controller";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { AppProvider } from "@/context/AppContext";
+import { PantryProvider } from "@/context/PantryContext";
 
-// Prevent the splash screen from auto-hiding before asset loading is complete.
+// Set API base URL for all generated hooks
+if (process.env.EXPO_PUBLIC_DOMAIN) {
+  setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
+}
+
 SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
@@ -24,6 +31,8 @@ function RootLayoutNav() {
   return (
     <Stack screenOptions={{ headerBackTitle: "Back" }}>
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+      <Stack.Screen name="decide" options={{ headerShown: false }} />
+      <Stack.Screen name="recommendation" options={{ headerShown: false }} />
     </Stack>
   );
 }
@@ -48,9 +57,13 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ErrorBoundary>
         <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView>
+          <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
-              <RootLayoutNav />
+              <AppProvider>
+                <PantryProvider>
+                  <RootLayoutNav />
+                </PantryProvider>
+              </AppProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>
