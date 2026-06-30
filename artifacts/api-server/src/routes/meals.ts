@@ -38,6 +38,144 @@ const MOOD_CONTEXT: Record<string, string> = {
   guests: "impressive, crowd-pleasing, shareable",
 };
 
+// ---------- Fallback meal bank ----------
+
+const FALLBACK_MEALS = [
+  {
+    name: "Creamy Butter Chicken",
+    description: "Rich, aromatic curry with tender chicken in a velvety tomato-cream sauce.",
+    cuisine: "Indian",
+    readyIn: 35,
+    matchScore: 94,
+    ingredients: ["chicken breast", "butter", "heavy cream", "tomato puree", "garlic", "ginger", "garam masala", "cumin", "rice"],
+    mood: null,
+  },
+  {
+    name: "Classic Spaghetti Carbonara",
+    description: "Silky egg-and-cheese pasta with crispy pancetta — Roman comfort at its finest.",
+    cuisine: "Italian",
+    readyIn: 20,
+    matchScore: 91,
+    ingredients: ["spaghetti", "pancetta", "eggs", "parmesan", "black pepper", "garlic"],
+    mood: null,
+  },
+  {
+    name: "Teriyaki Salmon Bowl",
+    description: "Glazed salmon over steamed rice with sesame-dressed greens.",
+    cuisine: "Japanese",
+    readyIn: 25,
+    matchScore: 92,
+    ingredients: ["salmon fillet", "soy sauce", "honey", "mirin", "rice", "cucumber", "sesame seeds", "spring onions"],
+    mood: "healthy",
+  },
+  {
+    name: "One-Pan Lemon Herb Chicken",
+    description: "Juicy chicken thighs roasted with garlic, lemon, and fresh herbs.",
+    cuisine: "Mediterranean",
+    readyIn: 40,
+    matchScore: 90,
+    ingredients: ["chicken thighs", "lemon", "garlic", "rosemary", "thyme", "olive oil", "potatoes"],
+    mood: null,
+  },
+  {
+    name: "Veggie Stir-Fry with Noodles",
+    description: "Crisp vegetables and noodles tossed in a savory umami sauce.",
+    cuisine: "Chinese",
+    readyIn: 15,
+    matchScore: 88,
+    ingredients: ["noodles", "broccoli", "bell pepper", "carrot", "soy sauce", "sesame oil", "garlic", "ginger"],
+    mood: "healthy",
+  },
+  {
+    name: "Avocado Toast with Poached Eggs",
+    description: "Creamy smashed avocado on sourdough with perfectly poached eggs.",
+    cuisine: "American",
+    readyIn: 12,
+    matchScore: 89,
+    ingredients: ["sourdough bread", "avocado", "eggs", "lemon", "chilli flakes", "salt", "pepper"],
+    mood: "tired",
+  },
+  {
+    name: "Black Bean Tacos",
+    description: "Smoky spiced black beans in warm tortillas with fresh salsa.",
+    cuisine: "Mexican",
+    readyIn: 18,
+    matchScore: 87,
+    ingredients: ["tortillas", "black beans", "tomato", "onion", "coriander", "cumin", "lime", "avocado"],
+    mood: "budget",
+  },
+  {
+    name: "Honey Garlic Shrimp",
+    description: "Succulent shrimp glazed in honey-garlic butter, ready in minutes.",
+    cuisine: "American",
+    readyIn: 15,
+    matchScore: 93,
+    ingredients: ["shrimp", "honey", "garlic", "butter", "soy sauce", "parsley", "rice"],
+    mood: "romantic",
+  },
+  {
+    name: "Greek Chicken Souvlaki",
+    description: "Marinated grilled chicken with tzatziki and warm pita.",
+    cuisine: "Greek",
+    readyIn: 30,
+    matchScore: 91,
+    ingredients: ["chicken breast", "lemon", "oregano", "olive oil", "garlic", "pita", "cucumber", "yoghurt"],
+    mood: "guests",
+  },
+  {
+    name: "Beef & Broccoli",
+    description: "Tender beef strips and broccoli in a rich oyster sauce over rice.",
+    cuisine: "Chinese",
+    readyIn: 22,
+    matchScore: 90,
+    ingredients: ["beef sirloin", "broccoli", "oyster sauce", "soy sauce", "garlic", "ginger", "sesame oil", "rice"],
+    mood: "protein",
+  },
+  {
+    name: "Mac and Cheese",
+    description: "Ultra-creamy baked mac with a golden breadcrumb crust.",
+    cuisine: "American",
+    readyIn: 30,
+    matchScore: 96,
+    ingredients: ["macaroni", "cheddar", "butter", "flour", "milk", "mustard", "breadcrumbs"],
+    mood: "kids",
+  },
+];
+
+function getFallbackMeal(mood: string | null, allergies: string[], pantryIngredients: string[]) {
+  // Filter by mood if one is selected
+  const moodMatches = mood ? FALLBACK_MEALS.filter((m) => m.mood === mood) : [];
+  const pool = moodMatches.length > 0 ? moodMatches : FALLBACK_MEALS;
+
+  // Pick deterministically but vary by time-of-day
+  const hour = new Date().getHours();
+  const picked = pool[hour % pool.length]!;
+
+  // Calculate missing ingredients from pantry
+  const pantrySet = new Set(pantryIngredients.map((i) => i.toLowerCase()));
+  const missingIngredients = pantryIngredients.length > 0
+    ? picked.ingredients.filter((ing) => !pantrySet.has(ing.toLowerCase())).slice(0, 3)
+    : [];
+
+  return {
+    id: generateId(),
+    ...picked,
+    missingIngredients,
+    mood: mood ?? undefined,
+  };
+}
+
+// ---------- Weekly plan fallback ----------
+
+function getFallbackWeeklyPlan(): any[] {
+  const shuffled = [...FALLBACK_MEALS].sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, 7).map((m) => ({
+    id: generateId(),
+    ...m,
+    missingIngredients: [],
+  }));
+}
+
 /**
  * POST /api/meals/recommend
  * Returns a single AI-recommended meal
@@ -114,12 +252,9 @@ Rules:
 
     res.json(meal);
   } catch (err: any) {
-    const msg = err?.message ?? "Unknown error";
-    if (msg.includes("OPENAI_API_KEY")) {
-      res.status(503).json({ error: "OpenAI API key not configured. Add OPENAI_API_KEY to your environment secrets." });
-    } else {
-      res.status(500).json({ error: `AI recommendation failed: ${msg}` });
-    }
+    // Fallback to curated meals when AI is unavailable (quota, no key, network)
+    const fallback = getFallbackMeal(mood, profile.allergies, ingredients);
+    res.json(fallback);
   }
 });
 
@@ -188,13 +323,8 @@ Vary the cuisines. Keep meals practical for home cooking.`;
     }));
 
     res.json(meals);
-  } catch (err: any) {
-    const msg = err?.message ?? "Unknown error";
-    if (msg.includes("OPENAI_API_KEY")) {
-      res.status(503).json({ error: "OpenAI API key not configured." });
-    } else {
-      res.status(500).json({ error: `Weekly plan failed: ${msg}` });
-    }
+  } catch {
+    res.json(getFallbackWeeklyPlan());
   }
 });
 
