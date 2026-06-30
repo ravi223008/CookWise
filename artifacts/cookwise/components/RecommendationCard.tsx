@@ -27,6 +27,7 @@ export interface RecommendationCardProps {
   meal: Meal;
   onCookNow: () => void;
   onChooseAnother: () => void;
+  label?: string;
 }
 
 const CUISINE_EMOJI: Record<string, string> = {
@@ -46,9 +47,18 @@ function getCuisineEmoji(cuisine: string): string {
   return CUISINE_EMOJI[cuisine] ?? "🍽️";
 }
 
-const IMAGE_HEIGHT = 210;
+function getMatchColor(
+  matchScore: number,
+  colors: { primary: string; orange: string; mutedForeground: string }
+): string {
+  if (matchScore >= 90) return colors.primary;
+  if (matchScore >= 70) return colors.orange;
+  return colors.mutedForeground;
+}
 
-export function RecommendationCard({ meal, onCookNow, onChooseAnother }: RecommendationCardProps) {
+const IMAGE_HEIGHT = 200;
+
+export function RecommendationCard({ meal, onCookNow, onChooseAnother, label = "Today's Recommendation", }: RecommendationCardProps) {
   const colors = useColors();
   const cookScale = useSharedValue(1);
   const anotherScale = useSharedValue(1);
@@ -76,12 +86,7 @@ export function RecommendationCard({ meal, onCookNow, onChooseAnother }: Recomme
     onChooseAnother();
   }, [anotherScale, onChooseAnother]);
 
-  const matchColor =
-    meal.matchScore >= 90
-      ? colors.primary
-      : meal.matchScore >= 70
-        ? colors.orange
-        : colors.mutedForeground;
+  const matchColor = getMatchColor(meal.matchScore, colors);
 
   const hasThumbnail = Boolean(meal.youtubeThumbnail);
 
@@ -90,9 +95,25 @@ export function RecommendationCard({ meal, onCookNow, onChooseAnother }: Recomme
       entering={FadeInUp.springify().damping(18).stiffness(120)}
       style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
     >
+      {/* ── Card header: Today's Recommendation ── */}
+      <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
+        <View style={styles.cardHeaderLeft}>
+          <View style={[styles.sparkDot, { backgroundColor: colors.sageLight }]}>
+            <Ionicons name="sparkles" size={12} color={colors.primary} />
+          </View>
+          <Text style={[styles.cardHeaderLabel, { color: colors.foreground }]}>
+            {label}
+          </Text>
+        </View>
+        <View style={[styles.matchBadgePill, { backgroundColor: matchColor }]}>
+          <Ionicons name="star" size={11} color="#fff" />
+          <Text style={styles.matchBadgePillText}>{meal.matchScore}%</Text>
+        </View>
+      </View>
+      
       {/* ── Hero image ── */}
       <View style={styles.imageContainer}>
-        {hasThumbnail ? (
+        {hasThumbnail? (
           <Image
             source={{ uri: meal.youtubeThumbnail }}
             style={styles.image}
@@ -107,24 +128,13 @@ export function RecommendationCard({ meal, onCookNow, onChooseAnother }: Recomme
           </LinearGradient>
         )}
 
-        <LinearGradient
-          colors={["transparent", "rgba(0,0,0,0.62)"]}
-          style={StyleSheet.absoluteFillObject}
-        />
-
-        {/* Top-left: label */}
-        <View style={styles.todayBadge}>
-          <Ionicons name="sparkles" size={10} color="#fff" />
-          <Text style={styles.todayLabel}>TODAY'S PICK</Text>
-        </View>
-
-        {/* Top-right: match score */}
-        <View style={[styles.matchBadge, { backgroundColor: matchColor }]}>
-          <Ionicons name="star" size={11} color="#fff" />
-          <Text style={styles.matchBadgeText}>{meal.matchScore}%</Text>
-        </View>
-
-        {/* Bottom: meal name over image */}
+        {hasThumbnail && (
+          <LinearGradient
+            colors={["transparent", "rgba(0,0,0,0.55)"]}
+            style={StyleSheet.absoluteFillObject}
+          />
+        )}
+        
         {hasThumbnail && (
           <Text style={styles.imageTitle} numberOfLines={2}>
             {meal.name}
@@ -134,6 +144,7 @@ export function RecommendationCard({ meal, onCookNow, onChooseAnother }: Recomme
 
       {/* ── Body ── */}
       <View style={styles.body}>
+        {/* Recipe name (only when no thumbnail) */}
         {!hasThumbnail && (
           <Text style={[styles.mealName, { color: colors.foreground }]} numberOfLines={2}>
             {meal.name}
@@ -144,7 +155,7 @@ export function RecommendationCard({ meal, onCookNow, onChooseAnother }: Recomme
           {meal.description}
         </Text>
 
-        {/* Meta pills */}
+        {/* Meta row: cooking time + cuisine + missing items */}
         <View style={styles.metaRow}>
           <View style={[styles.metaPill, { backgroundColor: colors.muted }]}>
             <Ionicons name="time-outline" size={13} color={colors.mutedForeground} />
@@ -183,7 +194,7 @@ export function RecommendationCard({ meal, onCookNow, onChooseAnother }: Recomme
               style={[
                 styles.matchBarFill,
                 {
-                  width: `${meal.matchScore}%` as any,
+                  width: `${meal.matchScore}%` as unknown as number,
                   backgroundColor: matchColor,
                 },
               ]}
@@ -191,12 +202,14 @@ export function RecommendationCard({ meal, onCookNow, onChooseAnother }: Recomme
           </View>
         </View>
 
-        {/* Actions */}
+        {/* Action buttons */}
         <View style={styles.actions}>
           <Animated.View style={[{ flex: 1 }, cookAnimStyle]}>
             <Pressable
               onPress={handleCookNow}
               style={[styles.cookBtn, { backgroundColor: colors.primary }]}
+              accessibilityLabel="Cook this meal now"
+              accessibilityRole="button"
             >
               <Ionicons name="checkmark-circle-outline" size={18} color={colors.primaryForeground} />
               <Text style={[styles.cookBtnText, { color: colors.primaryForeground }]}>
@@ -209,6 +222,8 @@ export function RecommendationCard({ meal, onCookNow, onChooseAnother }: Recomme
             <Pressable
               onPress={handleChooseAnother}
               style={[styles.anotherBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+              accessibilityLabel="Get a different recipe suggestion"
+              accessibilityRole="button"
             >
               <Ionicons name="shuffle-outline" size={18} color={colors.foreground} />
               <Text style={[styles.anotherBtnText, { color: colors.foreground }]}>
@@ -242,6 +257,12 @@ export function RecommendationCardSkeleton() {
     <Animated.View
       style={[styles.card, shimmer, { backgroundColor: colors.card, borderColor: colors.border }]}
     >
+      {/* Header skeleton */}
+      <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
+        <View style={[styles.skeletonLine, { width: 160, height: 16, backgroundColor: colors.muted }]} />
+        <View style={[styles.skeletonPill, { width: 52, height: 24, backgroundColor: colors.muted }]} />
+      </View>
+      
       <View style={[styles.imageContainer, { backgroundColor: colors.muted }]} />
       <View style={[styles.body, { gap: 14 }]}>
         <View style={[styles.skeletonLine, { width: "72%", backgroundColor: colors.muted }]} />
@@ -252,8 +273,8 @@ export function RecommendationCardSkeleton() {
         </View>
         <View style={[styles.skeletonBar, { backgroundColor: colors.muted }]} />
         <View style={styles.actions}>
-          <View style={[{ flex: 1, height: 50, borderRadius: 14, backgroundColor: colors.muted }]} />
-          <View style={[{ flex: 1, height: 50, borderRadius: 14, backgroundColor: colors.muted }]} />
+          <View style={{ flex: 1, height: 50, borderRadius: 14, backgroundColor: colors.muted }} />
+          <View style={{ flex: 1, height: 50, borderRadius: 14, backgroundColor: colors.muted }} />
         </View>
       </View>
     </Animated.View>
@@ -271,6 +292,45 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 6,
   },
+  
+  cardHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+  },
+  cardHeaderLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  sparkDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  cardHeaderLabel: {
+    fontSize: 15,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.2,
+  },
+  matchBadgePill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 20,
+  },
+  matchBadgePillText: {
+    fontSize: 12,
+    fontFamily: "Inter_700Bold",
+    color: "#fff",
+  },
   imageContainer: {
     height: IMAGE_HEIGHT,
     backgroundColor: "#EEF2EE",
@@ -287,40 +347,6 @@ const styles = StyleSheet.create({
   },
   cuisineEmoji: {
     fontSize: 64,
-  },
-  todayBadge: {
-    position: "absolute",
-    top: 14,
-    left: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: "rgba(92,122,98,0.82)",
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  todayLabel: {
-    fontSize: 10,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
-    letterSpacing: 0.9,
-  },
-  matchBadge: {
-    position: "absolute",
-    top: 14,
-    right: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 20,
-  },
-  matchBadgeText: {
-    fontSize: 12,
-    fontFamily: "Inter_700Bold",
-    color: "#fff",
   },
   imageTitle: {
     position: "absolute",
