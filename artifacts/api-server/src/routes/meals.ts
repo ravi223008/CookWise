@@ -28,15 +28,42 @@ interface RecommendRequest {
   };
 }
 
-const MOOD_CONTEXT: Record<string, string> = {
-  tired: "simple, comforting, minimal effort required",
-  romantic: "elegant, impressive, restaurant-quality",
-  budget: "cheap, economical, uses basic pantry staples",
-  protein: "high protein, muscle-building, filling",
-  healthy: "nutritious, balanced, light",
-  kids: "kid-friendly, mild, fun and simple",
-  guests: "impressive, crowd-pleasing, shareable",
-};
+const MOOD_CONTEXT: Record<string, { vibe: string; effort: string; style: string }> = {
+  tired: {
+    vibe: "exhausted after a long day",
+    effort: "minimal — 15-25 min, one pan, very simple steps",
+    style: "comforting, familiar, no complicated techniques",
+  },
+  romantic: {
+    vibe: "planning a special evening for two",
+    effort: "worth the extra effort — 30-45 min, feels restaurant-quality",
+    style: "elegant, beautifully presented, a little indulgent",
+  },
+  budget: {
+    vibe: "watching spending this week",
+    effort: "practical — 20-30 min, economical ingredients, zero waste",
+    style: "hearty and satisfying without expensive items",
+  },
+  protein: {
+    vibe: "focused on fitness and fuelling well",
+    effort: "straightforward — 20-35 min, high-protein focus",
+    style: "substantial, macro-conscious, filling",
+  },
+  healthy: {
+    vibe: "wanting to eat clean and feel good",
+    effort: "light — 15-30 min, fresh ingredients",
+    style: "nutritious, balanced macros, light on heavy fats",
+  },
+  kids: {
+    vibe: "feeding the whole family including picky eaters",
+    effort: "simple — 20-30 min, crowd-pleasing",
+    style: "mild, fun, universally loved flavours — no exotic ingredients",
+  },
+  guests: {
+    vibe: "impressing people coming over for dinner",
+    effort: "worth it — 40-60 min, impressive but achievable",
+    style: "shareable, centrepiece dish, visually stunning",
+  },
 
 // ---------- Fallback meal bank ----------
 
@@ -208,6 +235,15 @@ function getFallbackWeeklyPlan(): any[] {
   }));
 }
 
+function getTimeOfDayContext(): string {
+  const h = new Date().getHours();
+  if (h < 11) return "morning (breakfast or brunch)";
+  if (h < 15) return "midday (lunch)";
+  if (h < 18) return "late afternoon (early dinner)";
+  return "evening (dinner)";
+}
+
+
 /**
  * POST /api/meals/recommend
  * Returns a single AI-recommended meal
@@ -216,56 +252,77 @@ router.post("/recommend", async (req, res) => {
   const body = req.body as RecommendRequest;
   const { ingredients, mood, recentMeals, profile } = body;
 
-  const moodHint = mood ? MOOD_CONTEXT[mood] ?? "" : "";
-  const budgetMap = { low: "under $10", medium: "$10-25", high: "any budget" };
-  const budgetHint = budgetMap[profile.budget] ?? "$10-25";
+  const moodCtx = mood ? MOOD_CONTEXT[mood] : null;
+  const budgetMap = { low: "under $10 per meal", medium: "$10–25 per meal", high: "no budget constraint" };
+  const budgetHint = budgetMap[profile.budget] ?? "$10–25 per meal";
+  const timeOfDay = getTimeOfDayContext();
 
-  const prompt = `You are CookWise, an AI dinner decision assistant. Your job is to recommend ONE specific meal.
+  const hasPantry = ingredients.length > 0;
+  const hasCuisinePrefs = profile.preferredCuisines.length > 0;
+  const hasAllergies = profile.allergies.length > 0;
+  const hasRecentMeals = recentMeals.length > 0;
 
-Context:
-- User name: ${profile.name}
-- Family size: ${profile.familySize} people
-- Budget: ${budgetHint} per meal
-- Allergies/restrictions: ${profile.allergies.length > 0 ? profile.allergies.join(", ") : "none"}
-- Preferred cuisines: ${profile.preferredCuisines.length > 0 ? profile.preferredCuisines.join(", ") : "any"}
-- Tonight's mood: ${mood ? `${mood} (${moodHint})` : "no preference"}
-- Available pantry ingredients: ${ingredients.length > 0 ? ingredients.join(", ") : "basic pantry staples (salt, pepper, oil, common spices)"}
-- Recently cooked (avoid repeating): ${recentMeals.length > 0 ? recentMeals.join(", ") : "none"}
+  const systemPrompt = `You are the user's personal AI Chef — not a recipe search engine. You think deeply about the person in front of you: their energy level tonight, what they have in the fridge, their family, their budget, and what they've been eating lately. Then you make ONE confident decision, as a great chef would.
 
-Recommend exactly ONE meal that best fits. Be specific and confident — pick ONE meal, not options.
+Your job is to pick the single best meal for this specific person at this specific moment. Be decisive. Never hedge. Never list options. Commit to one recommendation with confidence.`;
+
+  const userPrompt = `Make me a personalized dinner recommendation.
+
+WHO I AM:
+- Name: ${profile.name}
+- Cooking for: ${profile.familySize} ${profile.familySize === 1 ? "person (myself)" : "people"}
+- Budget: ${budgetHint}
+- Allergies / dietary restrictions: ${hasAllergies? profile.allergies.join(", ") : "none"}
+- Cuisine preferences: ${hasCuisinePrefs? profile.preferredCuisines.join(", ") : "open to anything"}
+
+RIGHT NOW:
+- Time of day: ${timeOfDay}
+- Tonight's mood/vibe: ${moodCtx? `${mood} — I'm ${moodCtx.vibe}`: "no particular mood, just hungry"}
+- Effort I can give: ${moodCtx? moodCtx.effort: "moderate — 20–40 min is fine"}
+- Style I want: ${moodCtx? moodCtx.style: "something satisfying and well-balanced"}
+
+WHAT'S IN MY PANTRY:
+${hasPantry? ingredients.join(", "): "I haven't listed ingredients — assume basic staples: salt, pepper, olive oil, onion, garlic, eggs, butter, and common dry goods"}
+
+WHAT I'VE COOKED RECENTLY (avoid repeating these):
+${hasRecentMeals ? recentMeals.join(", ") : "nothing tracked yet"}
+
+DECISION RULES:
+1. Pick ONE meal. Be confident and decisive — as my personal chef, I trust your judgment.
+2. Prioritize what I can actually make with my pantry. Minimize shopping trips.
+3. Respect my allergies absolutely — no exceptions.
+4. Match the effort level to my mood. If I'm tired, keep it simple. If I have guests, impress them.
+5. Avoid repeating recent meals.
+6. matchScore reflects your true confidence. This is the right meal for me RIGHT NOW:
+   - 90–99: perfect fit — pantry match + mood + preferences all align
+   - 75–89: good fit — most criteria met, maybe 1–2 things to buy
+   - 60–74: acceptable — some compromises, or pantry is bare
+   If your confidence is below 70, still pick ONE meal, but lower the matchScore honestly.
 
 Respond with ONLY valid JSON, no markdown, no explanation:
 {
   "name": "Meal Name",
-  "description": "One enticing sentence describing the dish (max 100 chars)",
+  "description": "One enticing, specific sentence (max 100 chars) — mention a key flavor or technique",
   "cuisine": "Cuisine type",
   "readyIn": 30,
   "matchScore": 94,
-  "ingredients": ["ingredient 1", "ingredient 2", "..."],
-  "missingIngredients": ["ingredients from the list above that the user doesn't have"]
+  "ingredients": ["complete list of ingredients needed, 5–12 items"],
+  "missingIngredients": ["only items from ingredients[] that are NOT in the pantry list above"]
 }
-
-Rules:
-- matchScore is 85-99 (how well this meal fits the context)
-- readyIn is realistic cooking time in minutes
-- ingredients should be a complete list needed for this meal (5-12 items)
-- missingIngredients must be a subset of ingredients that are NOT in the pantry list
-- Keep it practical and achievable for a home cook`;
 
   try {
     const openai = getOpenAI();
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },],
       max_tokens: 600,
-      temperature: 0.8,
+      temperature: 0.75,
     });
 
     const raw = completion.choices[0]?.message?.content?.trim() ?? "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) {
-      throw new Error("No JSON found in AI response");
-    }
+    if (!jsonMatch) throw new Error("No JSON found in AI response");
 
     const parsed = JSON.parse(jsonMatch[0]);
     const yt = await fetchYouTubeVideo(parsed.name);
@@ -275,11 +332,9 @@ Rules:
       description: parsed.description,
       cuisine: parsed.cuisine,
       readyIn: Number(parsed.readyIn) || 30,
-      matchScore: Number(parsed.matchScore) || 90,
-      ingredients: Array.isArray(parsed.ingredients) ? parsed.ingredients : [],
-      missingIngredients: Array.isArray(parsed.missingIngredients)
-        ? parsed.missingIngredients
-        : [],
+      matchScore: Math.min(99, Math.max(60, Number(parsed.matchScore) || 85)),
+      ingredients: Array.isArray(parsed.ingredients) ? parsed. ingredients : [],
+      missingIngredients: Array.isArray(parsed.missingIngredients) ? parsed.missingIngredients : [],
       mood: mood ?? undefined,
       ...yt,
     };
@@ -304,31 +359,48 @@ router.post("/weekly-plan", async (req, res) => {
     recentMeals: string[];
   };
 
-  const budgetMap = { low: "under $10", medium: "$10-25", high: "any budget" };
-  const budgetHint = budgetMap[profile.budget] ?? "$10-25";
+  const budgetMap = { low: "under $10 per meal", medium: "$10–25 per meal", high: "no budget constraint" };
+  const budgetHint = budgetMap[profile.budget] ?? "$10–25 per meal";
+  const hasPantry = pantryItems.length > 0;
 
-  const prompt = `You are CookWise. Generate a 7-day dinner meal plan.
+  const systemPrompt = `You are a personal AI Chef creating a thoughtful 7-day dinner plan. Think like a professional meal planner who knows this family well. Balance nutrition, variety, and effort levels across the week (lighter midweek, more ambitious on weekends), and make smart use of shared ingredients to reduce shopping. Each meal should feel personally chosen — not randomly generated.`;
 
-Context:
-- Family size: ${profile.familySize} people
-- Budget: ${budgetHint} per meal
-- Allergies: ${profile.allergies.length > 0 ? profile.allergies.join(", ") : "none"}
-- Preferred cuisines: ${profile.preferredCuisines.length > 0 ? profile.preferredCuisines.join(", ") : "any"}
-- Pantry items: ${pantryItems.length > 0 ? pantryItems.join(", ") : "basic staples"}
-- Recently cooked (avoid): ${recentMeals.length > 0 ? recentMeals.join(", ") : "none"}
+const userPrompt = `Plan 7 dinners for the week ahead.
 
-Respond with ONLY valid JSON array of exactly 7 meals:
+THE HOUSEHOLD:
+- Cooking for: ${profile.familySize} ${profile.familySize === 1 ? "person" : "people"}
+- Budget: ${budgetHint}
+- Allergies / restrictions: ${profile.allergies.length > 0 ? profile.allergies.join(", ") : "none"}
+- Cuisine preferences: ${profile.preferredCuisines.length > 0 ? profile.preferredCuisines.join(", ") : "open to variety"}
+
+PANTRY AVAILABLE:
+${hasPantry? pantryItems.join(", "): "basic staples only — salt, pepper, oil, onion, garlic, eggs, butter"}
+
+RECENTLY COOKED (avoid repeating):
+${recentMeals.length > 0 ? recentMeals.join(", ") : "nothing tracked"}
+
+PLANNING RULES:
+- Day 1–2 (Mon/Tue): Quick and easy, 20–30 min — start of the week energy
+- Day 3 (Wed): Something comforting mid-week
+- Day 4–5 (Thu/Fri): Slightly more exciting, still achievable after work
+- Day 6–7 (Sat/Sun): More ambitious or social — weekend cooking
+- Vary the cuisines across all 7 days — no repeated cuisine types
+- Rotate proteins: don't repeat the same protein two days in a row
+- Maximize pantry usage to minimize shopping
+- Each meal should feel genuinely appetizing, not like a placeholder
+
+Respond with ONLY a valid JSON array of exactly 7 meals, no markdown:
 [
   {
     "name": "Meal Name",
-    "description": "One sentence description",
+    "description": "One specific, enticing sentence — mention a key flavor or technique",
     "cuisine": "Cuisine type",
     "readyIn": 30,
     "matchScore": 90,
-    "ingredients": ["ing1", "ing2"],
-    "missingIngredients": ["missing1"]
+    "ingredients": ["complete ingredient list, 5–12 items"],
+    "missingIngredients": ["items not in the pantry above"]
   }
-]
+]`;
 
 Vary the cuisines. Keep meals practical for home cooking.`;
 
@@ -336,9 +408,10 @@ Vary the cuisines. Keep meals practical for home cooking.`;
     const openai = getOpenAI();
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "user", content: prompt }],
+      messages: [{ role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },],
       max_tokens: 2000,
-      temperature: 0.9,
+      temperature: 0.85,
     });
 
     const raw = completion.choices[0]?.message?.content?.trim() ?? "";
@@ -352,7 +425,7 @@ Vary the cuisines. Keep meals practical for home cooking.`;
       description: m.description ?? "",
       cuisine: m.cuisine ?? "International",
       readyIn: Number(m.readyIn) || 30,
-      matchScore: Number(m.matchScore) || 85,
+      matchScore: Math.min(99, Math.max(60, Number(m.matchScore) || 85)),
       ingredients: Array.isArray(m.ingredients) ? m.ingredients : [],
       missingIngredients: Array.isArray(m.missingIngredients) ? m.missingIngredients : [],
     }));
