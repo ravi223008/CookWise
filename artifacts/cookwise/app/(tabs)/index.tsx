@@ -12,10 +12,15 @@ import {
   Text,
   View,
 } from "react-native";
+import Animated, {
+  FadeInDown,
+  useAnimatedStyle,
+  useSharedValue,
+  withSpring,
+} from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { LoadingDots } from "@/components/LoadingDots";
-import { MealCard } from "@/components/MealCard";
+import { RecommendationCard, RecommendationCardSkeleton } from "@/components/RecommendationCard";
 import { MoodSelector } from "@/components/MoodSelector";
 import { useApp } from "@/context/AppContext";
 import { usePantry } from "@/context/PantryContext";
@@ -27,6 +32,13 @@ function getGreeting() {
   if (h < 12) return "Good morning";
   if (h < 17) return "Good afternoon";
   return "Good evening";
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString("en", {
+    month: "short",
+    day: "numeric",
+  });
 }
 
 export default function HomeScreen() {
@@ -45,6 +57,7 @@ export default function HomeScreen() {
   } = useApp();
   const { items: pantryItems } = usePantry();
   const [refreshing, setRefreshing] = useState(false);
+  const ctaScale = useSharedValue(1);
 
   const fetchRecommendation = useCallback(async () => {
     setIsLoadingRecommendation(true);
@@ -57,7 +70,7 @@ export default function HomeScreen() {
       });
       setTonightsMeal(meal);
     } catch {
-      // TODO: show toast on error
+      // silent — fallback handled server-side
     } finally {
       setIsLoadingRecommendation(false);
     }
@@ -76,6 +89,26 @@ export default function HomeScreen() {
     setRefreshing(false);
   }, [fetchRecommendation]);
 
+  const handleCookNow = useCallback(() => {
+    if (!tonightsMeal) return;
+    router.push({
+      pathname: "/recommendation",
+      params: { meal: JSON.stringify(tonightsMeal) },
+    });
+  }, [tonightsMeal, router]);
+
+  const handleDecide = useCallback(() => {
+    ctaScale.value = withSpring(0.96, { duration: 80 }, () => {
+      ctaScale.value = withSpring(1, { duration: 220 });
+    });
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    router.push("/decide");
+  }, [ctaScale, router]);
+
+  const ctaAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: ctaScale.value }],
+  }));
+
   const topPad = Platform.OS === "web" ? 67 : insets.top;
 
   return (
@@ -91,15 +124,18 @@ export default function HomeScreen() {
           />
         }
       >
-        {/* Header */}
+        {/* ── Header ── */}
         <LinearGradient
           colors={[colors.sageLight, colors.background]}
-          style={[styles.headerGradient, { paddingTop: topPad + 24 }]}
+          style={[styles.headerGradient, { paddingTop: topPad + 20 }]}
         >
-          <View style={styles.headerContent}>
-            <View>
+          <Animated.View
+            entering={FadeInDown.delay(0).springify().damping(20)}
+            style={styles.headerContent}
+          >
+            <View style={styles.headerText}>
               <Text style={[styles.greeting, { color: colors.mutedForeground }]}>
-                {getGreeting()}
+                {getGreeting()} 👋
               </Text>
               <Text style={[styles.name, { color: colors.foreground }]}>
                 {profile.name}
@@ -107,46 +143,58 @@ export default function HomeScreen() {
             </View>
             <Pressable
               onPress={() => router.push("/(tabs)/profile")}
-              style={[styles.avatarBtn, { backgroundColor: colors.primary }]}
+              style={[
+                styles.avatarBtn,
+                {
+                  backgroundColor: colors.primary,
+                  shadowColor: colors.primary,
+                  shadowOffset: { width: 0, height: 4 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 8,
+                  elevation: 4,
+                },
+              ]}
             >
               <Text style={[styles.avatarLetter, { color: colors.primaryForeground }]}>
                 {profile.name.charAt(0).toUpperCase()}
               </Text>
             </Pressable>
-          </View>
+          </Animated.View>
         </LinearGradient>
 
-        {/* Mood */}
-        <View style={styles.section}>
-          <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-            Tonight's vibe
-          </Text>
-        </View>
-        <MoodSelector selected={selectedMood} onSelect={setSelectedMood} />
-
-        {/* Tonight's Recommendation */}
-        <View style={[styles.section, { marginTop: 28 }]}>
+        {/* ── Tonight's Vibe ── */}
+        <Animated.View
+          entering={FadeInDown.delay(80).springify().damping(20)}
+          style={styles.vibeSection}
+        >
           <View style={styles.sectionRow}>
-            <Ionicons name="restaurant" size={16} color={colors.primary} />
             <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-              Tonight's recommendation
+              TONIGHT'S VIBE
+            </Text>
+          </View>
+          <MoodSelector selected={selectedMood} onSelect={setSelectedMood} />
+        </Animated.View>
+
+        {/* ── Recommendation ── */}
+        <Animated.View
+          entering={FadeInDown.delay(160).springify().damping(20)}
+          style={styles.section}
+        >
+          <View style={styles.sectionRow}>
+            <Ionicons name="sparkles" size={15} color={colors.primary} />
+            <Text style={[styles.sectionLabelPrimary, { color: colors.foreground }]}>
+              Tonight's Recommendation
             </Text>
           </View>
 
           {isLoadingRecommendation ? (
-            <View
-              style={[
-                styles.loadingCard,
-                { backgroundColor: colors.card, borderColor: colors.border },
-              ]}
-            >
-              <LoadingDots />
-              <Text style={[styles.loadingText, { color: colors.mutedForeground }]}>
-                Finding the perfect meal...
-              </Text>
-            </View>
+            <RecommendationCardSkeleton />
           ) : tonightsMeal ? (
-            <MealCard meal={tonightsMeal} />
+            <RecommendationCard
+              meal={tonightsMeal}
+              onCookNow={handleCookNow}
+              onChooseAnother={fetchRecommendation}
+            />
           ) : (
             <View
               style={[
@@ -154,67 +202,96 @@ export default function HomeScreen() {
                 { backgroundColor: colors.card, borderColor: colors.border },
               ]}
             >
-              <Ionicons name="restaurant-outline" size={32} color={colors.mutedForeground} />
-              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-                No recommendation yet
+              <Ionicons name="restaurant-outline" size={36} color={colors.mutedForeground} />
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+                No suggestion yet
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+                Tap below to find tonight's dinner
               </Text>
               <Pressable
                 onPress={fetchRecommendation}
-                style={[styles.retryBtn, { borderColor: colors.primary }]}
+                style={[styles.retryBtn, { backgroundColor: colors.primary }]}
               >
-                <Text style={[styles.retryText, { color: colors.primary }]}>Try again</Text>
+                <Text style={[styles.retryText, { color: colors.primaryForeground }]}>
+                  Get Suggestion
+                </Text>
               </Pressable>
             </View>
           )}
-        </View>
+        </Animated.View>
 
-        {/* Decide My Dinner CTA */}
-        <View style={[styles.section, { marginTop: 8 }]}>
-          <Pressable
-            onPress={() => {
-              if (Platform.OS !== "web") {
-                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              }
-              router.push("/decide");
-            }}
-            style={({ pressed }) => [
-              styles.decideCta,
-              { backgroundColor: colors.accent, opacity: pressed ? 0.88 : 1 },
-            ]}
-          >
-            <Ionicons name="sparkles" size={22} color={colors.accentForeground} />
-            <Text style={[styles.decideCtaText, { color: colors.accentForeground }]}>
-              Decide My Dinner
-            </Text>
-          </Pressable>
-        </View>
+        {/* ── Decide My Dinner CTA ── */}
+        <Animated.View
+          entering={FadeInDown.delay(240).springify().damping(20)}
+          style={[styles.section, { marginTop: 4 }]}
+        >
+          <Animated.View style={ctaAnimStyle}>
+            <Pressable
+              onPress={handleDecide}
+              style={[
+                styles.decideCta,
+                {
+                  backgroundColor: colors.accent,
+                  shadowColor: colors.accent,
+                  shadowOffset: { width: 0, height: 6 },
+                  shadowOpacity: 0.3,
+                  shadowRadius: 14,
+                  elevation: 5,
+                },
+              ]}
+            >
+              <Ionicons name="sparkles" size={20} color={colors.accentForeground} />
+              <Text style={[styles.decideCtaText, { color: colors.accentForeground }]}>
+                Decide My Dinner
+              </Text>
+            </Pressable>
+          </Animated.View>
+        </Animated.View>
 
-        {/* Recent Meals */}
+        {/* ── Recent Meals ── */}
         {mealHistory.length > 0 && (
-          <View style={[styles.section, { marginTop: 28 }]}>
-            <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
-              Recently cooked
-            </Text>
-            <View style={styles.historyList}>
-              {mealHistory.slice(0, 3).map((entry) => (
+          <Animated.View
+            entering={FadeInDown.delay(320).springify().damping(20)}
+            style={[styles.section, { marginTop: 28 }]}
+          >
+            <View style={styles.sectionRow}>
+              <Ionicons name="time-outline" size={15} color={colors.mutedForeground} />
+              <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
+                RECENTLY COOKED
+              </Text>
+            </View>
+
+            <View style={[styles.historyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              {mealHistory.slice(0, 3).map((entry, idx) => (
                 <View
                   key={entry.mealId}
-                  style={[styles.historyRow, { borderBottomColor: colors.border }]}
+                  style={[
+                    styles.historyRow,
+                    {
+                      borderBottomColor: colors.border,
+                      borderBottomWidth: idx < Math.min(mealHistory.length, 3) - 1 ? 1 : 0,
+                    },
+                  ]}
                 >
-                  <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
-                  <Text style={[styles.historyName, { color: colors.foreground }]}>
+                  <View style={[styles.historyDot, { backgroundColor: colors.sageLight }]}>
+                    <Ionicons name="checkmark" size={13} color={colors.primary} />
+                  </View>
+                  <Text
+                    style={[styles.historyName, { color: colors.foreground }]}
+                    numberOfLines={1}
+                  >
                     {entry.mealName}
                   </Text>
-                  <Text style={[styles.historyDate, { color: colors.mutedForeground }]}>
-                    {new Date(entry.cookedAt).toLocaleDateString("en", {
-                      month: "short",
-                      day: "numeric",
-                    })}
-                  </Text>
+                  <View style={[styles.datePill, { backgroundColor: colors.muted }]}>
+                    <Text style={[styles.dateText, { color: colors.mutedForeground }]}>
+                      {formatDate(entry.cookedAt)}
+                    </Text>
+                  </View>
                 </View>
               ))}
             </View>
-          </View>
+          </Animated.View>
         )}
       </ScrollView>
     </View>
@@ -223,28 +300,34 @@ export default function HomeScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+
   headerGradient: {
     paddingHorizontal: 24,
-    paddingBottom: 24,
+    paddingBottom: 20,
   },
   headerContent: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
   },
+  headerText: {
+    gap: 3,
+  },
   greeting: {
     fontSize: 14,
-    fontFamily: "Inter_400Regular",
+    fontFamily: "Inter_500Medium",
+    letterSpacing: 0.1,
   },
   name: {
-    fontSize: 28,
+    fontSize: 30,
     fontFamily: "Inter_700Bold",
-    marginTop: 2,
+    letterSpacing: -0.5,
+    lineHeight: 36,
   },
   avatarBtn: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 46,
+    height: 46,
+    borderRadius: 23,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -252,53 +335,64 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontFamily: "Inter_700Bold",
   },
+
+  vibeSection: {
+    gap: 12,
+    marginTop: 4,
+    paddingTop: 4,
+  },
+
   section: {
     paddingHorizontal: 20,
-    gap: 12,
+    gap: 14,
+    marginTop: 28,
   },
   sectionRow: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    paddingHorizontal: 20,
   },
   sectionLabel: {
-    fontSize: 13,
+    fontSize: 11,
     fontFamily: "Inter_600SemiBold",
+    letterSpacing: 0.8,
     textTransform: "uppercase",
-    letterSpacing: 0.6,
   },
-  loadingCard: {
-    padding: 40,
-    borderRadius: 20,
-    borderWidth: 1,
-    alignItems: "center",
-    gap: 12,
+  sectionLabelPrimary: {
+    fontSize: 17,
+    fontFamily: "Inter_700Bold",
+    letterSpacing: -0.2,
   },
-  loadingText: {
-    fontSize: 14,
-    fontFamily: "Inter_400Regular",
-  },
+
   emptyCard: {
     padding: 40,
-    borderRadius: 20,
+    borderRadius: 24,
     borderWidth: 1,
     alignItems: "center",
-    gap: 12,
+    gap: 10,
   },
-  emptyText: {
-    fontSize: 15,
+  emptyTitle: {
+    fontSize: 17,
+    fontFamily: "Inter_600SemiBold",
+    marginTop: 4,
+  },
+  emptySubtitle: {
+    fontSize: 14,
     fontFamily: "Inter_400Regular",
+    textAlign: "center",
   },
   retryBtn: {
-    paddingHorizontal: 20,
-    paddingVertical: 8,
-    borderRadius: 20,
-    borderWidth: 1,
+    marginTop: 6,
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    borderRadius: 14,
   },
   retryText: {
-    fontSize: 14,
-    fontFamily: "Inter_500Medium",
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
   },
+
   decideCta: {
     flexDirection: "row",
     alignItems: "center",
@@ -308,24 +402,42 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   decideCtaText: {
-    fontSize: 18,
+    fontSize: 17,
     fontFamily: "Inter_700Bold",
+    letterSpacing: -0.2,
   },
-  historyList: { gap: 0 },
+
+  historyCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
   historyRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    paddingVertical: 12,
-    borderBottomWidth: 1,
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  historyDot: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    alignItems: "center",
+    justifyContent: "center",
   },
   historyName: {
     flex: 1,
     fontSize: 15,
     fontFamily: "Inter_500Medium",
   },
-  historyDate: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
+  datePill: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 20,
+  },
+  dateText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
   },
 });

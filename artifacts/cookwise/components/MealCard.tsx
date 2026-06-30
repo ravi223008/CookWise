@@ -10,6 +10,7 @@ import {
   View,
 } from "react-native";
 import Animated, {
+  FadeInUp,
   useAnimatedStyle,
   useSharedValue,
   withSpring,
@@ -58,14 +59,28 @@ export function MealCard({ meal, onPress, compact = false }: MealCardProps) {
         : colors.mutedForeground;
 
   return (
-    <Animated.View style={animatedStyle}>
-      <Pressable onPress={handlePress} style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border, borderRadius: colors.radius ?? 20 }]}>
+    <Animated.View entering={FadeInUp.springify().damping(18)} style={animatedStyle}>
+      <Pressable
+        onPress={handlePress}
+        style={[
+          styles.card,
+          {
+            backgroundColor: colors.card,
+            borderColor: colors.border,
+            borderRadius: 20,
+          },
+        ]}
+      >
         <View style={styles.header}>
           <View style={styles.titleRow}>
-            <Text style={[styles.mealName, { color: colors.foreground }]} numberOfLines={2}>
+            <Text
+              style={[styles.mealName, { color: colors.foreground }]}
+              numberOfLines={2}
+            >
               {meal.name}
             </Text>
             <View style={[styles.matchBadge, { backgroundColor: matchColor + "18" }]}>
+              <Ionicons name="star" size={11} color={matchColor} />
               <Text style={[styles.matchText, { color: matchColor }]}>
                 {meal.matchScore}%
               </Text>
@@ -73,7 +88,10 @@ export function MealCard({ meal, onPress, compact = false }: MealCardProps) {
           </View>
 
           {!compact && (
-            <Text style={[styles.description, { color: colors.mutedForeground }]} numberOfLines={2}>
+            <Text
+              style={[styles.description, { color: colors.mutedForeground }]}
+              numberOfLines={2}
+            >
               {meal.description}
             </Text>
           )}
@@ -120,10 +138,10 @@ const styles = StyleSheet.create({
     padding: 20,
     borderWidth: 1,
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.06,
-    shadowRadius: 8,
-    elevation: 3,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 4,
     gap: 12,
   },
   header: {
@@ -140,15 +158,19 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     flex: 1,
     lineHeight: 28,
+    letterSpacing: -0.2,
   },
   matchBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 20,
     marginTop: 2,
   },
   matchText: {
-    fontSize: 13,
+    fontSize: 12,
     fontFamily: "Inter_700Bold",
   },
   description: {
