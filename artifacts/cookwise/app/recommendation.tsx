@@ -4,6 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
 import {
+  Image,
   Linking,
   Platform,
   Pressable,
@@ -149,7 +150,20 @@ export default function RecommendationScreen() {
               style={[styles.youtubeCard, { backgroundColor: colors.card, borderColor: colors.border }]}
             >
               <View style={[styles.ytThumb, { backgroundColor: colors.muted }]}>
-                <Ionicons name="play-circle" size={48} color="#FF0000" />
+                {meal.youtubeThumbnail ? (
+                  <>
+                    <Image
+                      source={{ uri: meal.youtubeThumbnail }}
+                      style={StyleSheet.absoluteFillObject}
+                      resizeMode="cover"
+                    />
+                    <View style={styles.ytPlayOverlay}>
+                      <Ionicons name="play-circle" size={36} color="#fff" />
+                    </View>
+                  </>
+                ) : (
+                  <Ionicons name="play-circle" size={48} color="#FF0000" />
+                )}
               </View>
               <View style={styles.ytInfo}>
                 <Text style={[styles.ytLabel, { color: colors.mutedForeground }]}>Watch recipe</Text>
@@ -172,9 +186,7 @@ export default function RecommendationScreen() {
                 <Text style={[styles.ytTitle, { color: colors.foreground }]}>
                   {`How to make ${meal.name}`}
                 </Text>
-                <Text style={[styles.ytMetaText, { color: colors.mutedForeground }]}>
-                  Add YOUTUBE_API_KEY to enable
-                </Text>
+                <Text style={[styles.ytMetaText, { color: colors.mutedForeground }]}>Loading video...</Text>
               </View>
             </View>
           )}
@@ -320,6 +332,13 @@ const styles = StyleSheet.create({
     height: 90,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
+  },
+  ytPlayOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "rgba(0,0,0,0.25)",
   },
   ytInfo: {
     flex: 1,

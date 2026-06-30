@@ -167,6 +167,38 @@ function getFallbackMeal(mood: string | null, allergies: string[], pantryIngredi
 
 // ---------- Weekly plan fallback ----------
 
+// ---------- YouTube helper ----------
+
+async function fetchYouTubeVideo(mealName: string): Promise<{
+  youtubeVideoId: string | null;
+  youtubeTitle: string | null;
+  youtubeThumbnail: string | null;
+}> {
+  const apiKey = process.env["YOUTUBE_API_KEY"];
+  if (!apiKey) return { youtubeVideoId: null, youtubeTitle: null, youtubeThumbnail: null };
+  try {
+    const q = encodeURIComponent(`how to make ${mealName} recipe`);
+    const url = `https://www.googleapis.com/youtube/v3/search?part=snippet&q=${q}&type=video&maxResults=1&key=${apiKey}`;
+    const resp = await fetch(url);
+    if (!resp.ok) return { youtubeVideoId: null, youtubeTitle: null, youtubeThumbnail: null };
+    const data = (await resp.json()) as {
+      items?: Array<{
+        id: { videoId: string };
+        snippet: { title: string; thumbnails: { medium: { url: string } } };
+      }>;
+    };
+    const item = data.items?.[0];
+    if (!item) return { youtubeVideoId: null, youtubeTitle: null, youtubeThumbnail: null };
+    return {
+      youtubeVideoId: item.id.videoId,
+      youtubeTitle: item.snippet.title,
+      youtubeThumbnail: item.snippet.thumbnails?.medium?.url ?? null,
+    };
+  } catch {
+    return { youtubeVideoId: null, youtubeTitle: null, youtubeThumbnail: null };
+  }
+}
+
 function getFallbackWeeklyPlan(): any[] {
   const shuffled = [...FALLBACK_MEALS].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, 7).map((m) => ({
@@ -236,6 +268,7 @@ Rules:
     }
 
     const parsed = JSON.parse(jsonMatch[0]);
+    const yt = await fetchYouTubeVideo(parsed.name);
     const meal = {
       id: generateId(),
       name: parsed.name,
@@ -248,13 +281,15 @@ Rules:
         ? parsed.missingIngredients
         : [],
       mood: mood ?? undefined,
+      ...yt,
     };
 
     res.json(meal);
-  } catch (err: any) {
+  } catch {
     // Fallback to curated meals when AI is unavailable (quota, no key, network)
     const fallback = getFallbackMeal(mood, profile.allergies, ingredients);
-    res.json(fallback);
+    const yt = await fetchYouTubeVideo(fallback.name);
+    res.json({ ...fallback, ...yt });
   }
 });
 
