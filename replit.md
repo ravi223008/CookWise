@@ -41,11 +41,17 @@ An AI-powered meal planning mobile app that recommends recipes, scans receipts t
 
 - API contracts are code-generated: edit `lib/api-spec/openapi.yaml`, then run `codegen` — never hand-edit `lib/api-client-react/` or `lib/api-zod/`
 - Database schema lives in `lib/db/src/schema/index.ts`; push changes with `pnpm --filter @workspace/db run push`
+- All API route inputs are validated with Zod (`RecommendSchema`, `WeeklyPlanSchema` in `routes/meals.ts`) — always parse with `.safeParse()`, never cast `req.body`
+- Rate limiting uses two tiers: 200 req/15min general + 30 req/15min on LLM endpoints (`/meals/recommend`, `/meals/weekly-plan`) for cost control
+- `app.set("trust proxy", 1)` is set so rate limiting works correctly behind Replit's reverse proxy
+- Error handler returns sanitised messages in production, full messages in development
+- Dark mode: both `light` and `dark` palettes are defined in `constants/colors.ts`; `useColors()` switches automatically based on device setting
 
 ## Gotchas
 
 - Run `pnpm install` from the workspace root after pulling changes that modify `pnpm-lock.yaml`
 - Any change to the OpenAPI spec requires running `pnpm --filter @workspace/api-spec run codegen` to keep generated types in sync
+- `@react-native-community/netinfo` must stay at `11.4.1` — Expo 54 does not support v12
 
 ## User preferences
 

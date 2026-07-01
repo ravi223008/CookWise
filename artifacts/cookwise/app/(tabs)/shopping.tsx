@@ -51,9 +51,13 @@ function CategoryHeader({ category, count }: { category: ShoppingCategory; count
   const colors = useColors();
   const cfg = CATEGORY_CONFIG[category];
   return (
-    <View style={[styles.catHeader, { backgroundColor: colors.card, borderColor: colors.border }]}>
+    <View
+      style={[styles.catHeader, { backgroundColor: colors.card, borderColor: colors.border }]}
+      accessibilityRole="header"
+      accessibilityLabel={`${cfg.label}, ${count} item${count !== 1 ? "s" : ""}`}
+    >
       <View style={[styles.catIconWrap, { backgroundColor: cfg.bg }]}>
-        <Ionicons name={cfg.icon} size={16} color={cfg.color} />
+        <Ionicons name={cfg.icon} size={16} color={cfg.color} importantForAccessibility="no" />
       </View>
       <Text style={[styles.catLabel, { color: colors.foreground }]}>{cfg.label}</Text>
       <View style={[styles.catBadge, { backgroundColor: colors.muted }]}>
@@ -63,7 +67,7 @@ function CategoryHeader({ category, count }: { category: ShoppingCategory; count
   );
 }
 
-function ShoppingRow({
+const ShoppingRow = React.memo(function ShoppingRow({
   item,
   onToggle,
   onRemove,
@@ -82,6 +86,9 @@ function ShoppingRow({
         if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         onToggle(item.id);
       }}
+      accessibilityRole="checkbox"
+      accessibilityLabel={item.name + (item.quantity ? `, ${item.quantity}` : "")}
+      accessibilityState={{ checked: item.checked }}
     >
       <View
         style={[
@@ -92,7 +99,7 @@ function ShoppingRow({
           },
         ]}
       >
-        {item.checked && <Ionicons name="checkmark" size={12} color="#fff" />}
+        {item.checked && <Ionicons name="checkmark" size={12} color="#fff" importantForAccessibility="no" />}
       </View>
 
       <View style={styles.rowText}>
@@ -115,12 +122,17 @@ function ShoppingRow({
         )}
       </View>
 
-      <Pressable onPress={() => onRemove(item.id)} hitSlop={8}>
-        <Ionicons name="close-circle" size={20} color={colors.mutedForeground} />
+      <Pressable
+        onPress={() => onRemove(item.id)}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove ${item.name}`}
+      >
+        <Ionicons name="close-circle" size={20} color={colors.mutedForeground} importantForAccessibility="no" />
       </Pressable>
     </Pressable>
   );
-}
+});
 
 // ─────────────────────────────────────────────
 // Main screen
@@ -129,7 +141,7 @@ function ShoppingRow({
 export default function ShoppingScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { list, generateFromMeals, addItem, toggleItem, removeItem, clearChecked, clearAll } =
+  const { list, isLoading, generateFromMeals, addItem, toggleItem, removeItem, clearChecked, clearAll } =
     useShoppingList();
   const { items: pantryItems } = usePantry();
   const [input, setInput] = useState("");
@@ -180,7 +192,9 @@ export default function ShoppingScreen() {
         ]}
       >
         <View>
-          <Text style={[styles.title, { color: colors.foreground }]}>Shopping List</Text>
+          <Text style={[styles.title, { color: colors.foreground }]} accessibilityRole="header">
+            Shopping List
+          </Text>
           {!isEmpty && (
             <Text style={[styles.subtitle, { color: colors.mutedForeground }]}>
               {checkedCount}/{totalCount} items
@@ -192,8 +206,10 @@ export default function ShoppingScreen() {
             <Pressable
               onPress={clearChecked}
               style={[styles.headerBtn, { backgroundColor: colors.muted }]}
+              accessibilityRole="button"
+              accessibilityLabel="Clear checked items"
             >
-              <Ionicons name="checkmark-done-outline" size={15} color={colors.mutedForeground} />
+              <Ionicons name="checkmark-done-outline" size={15} color={colors.mutedForeground} importantForAccessibility="no" />
               <Text style={[styles.headerBtnText, { color: colors.mutedForeground }]}>Clear done</Text>
             </Pressable>
           )}
@@ -201,8 +217,10 @@ export default function ShoppingScreen() {
             <Pressable
               onPress={clearAll}
               style={[styles.headerBtn, { backgroundColor: colors.muted }]}
+              accessibilityRole="button"
+              accessibilityLabel="Clear all items"
             >
-              <Ionicons name="trash-outline" size={15} color={colors.mutedForeground} />
+              <Ionicons name="trash-outline" size={15} color={colors.mutedForeground} importantForAccessibility="no" />
             </Pressable>
           )}
         </View>
@@ -213,11 +231,14 @@ export default function ShoppingScreen() {
         onPress={handleGenerateFromPlan}
         disabled={generating}
         style={[styles.generateBanner, { backgroundColor: colors.primary }]}
+        accessibilityRole="button"
+        accessibilityLabel="Generate shopping list from weekly plan"
+        accessibilityState={{ disabled: generating }}
       >
         {generating ? (
           <ActivityIndicator size="small" color={colors.primaryForeground} />
         ) : (
-          <Ionicons name="sparkles" size={16} color={colors.primaryForeground} />
+          <Ionicons name="sparkles" size={16} color={colors.primaryForeground} importantForAccessibility="no" />
         )}
         <Text style={[styles.generateBannerText, { color: colors.primaryForeground }]}>
           {generating ? "Generating…" : "Generate from weekly plan"}
@@ -242,6 +263,8 @@ export default function ShoppingScreen() {
           onChangeText={setInput}
           onSubmitEditing={handleAdd}
           returnKeyType="done"
+          accessibilityLabel="Item name"
+          accessibilityHint="Type an item and tap Add"
         />
         <Pressable
           onPress={handleAdd}
@@ -250,19 +273,27 @@ export default function ShoppingScreen() {
             styles.addBtn,
             { backgroundColor: input.trim() ? colors.primary : colors.muted },
           ]}
+          accessibilityRole="button"
+          accessibilityLabel="Add item to list"
+          accessibilityState={{ disabled: !input.trim() }}
         >
           <Ionicons
             name="add"
             size={22}
             color={input.trim() ? colors.primaryForeground : colors.mutedForeground}
+            importantForAccessibility="no"
           />
         </Pressable>
       </View>
 
-      {/* List */}
-      {isEmpty ? (
+      {/* Loading / List */}
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : isEmpty ? (
         <View style={styles.empty}>
-          <Ionicons name="cart-outline" size={52} color={colors.mutedForeground} />
+          <Ionicons name="cart-outline" size={52} color={colors.mutedForeground} importantForAccessibility="no" />
           <Text style={[styles.emptyTitle, { color: colors.foreground }]}>No items yet</Text>
           <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
             Tap "Generate from weekly plan" to auto-fill missing ingredients, or add items manually above.
@@ -374,6 +405,11 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingContainer: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },

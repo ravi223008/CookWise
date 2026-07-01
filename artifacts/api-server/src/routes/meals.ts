@@ -1,5 +1,6 @@
 import { Router } from "express";
 import OpenAI from "openai";
+import { z } from "zod";
 
 const router = Router();
 
@@ -18,21 +19,35 @@ function generateId() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Types
+// Request validation schemas
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface RecommendRequest {
-  ingredients: string[];
-  mood: string | null;
-  recentMeals: string[];
-  profile: {
-    name: string;
-    allergies: string[];
-    budget: "low" | "medium" | "high";
-    familySize: number;
-    preferredCuisines: string[];
-  };
-}
+const ProfileSchema = z.object({
+  name: z.string().max(100).default(""),
+  allergies: z.array(z.string().max(100)).max(30).default([]),
+  budget: z.enum(["low", "medium", "high"]).default("medium"),
+  familySize: z.number().int().min(1).max(20).default(2),
+  preferredCuisines: z.array(z.string().max(100)).max(20).default([]),
+});
+
+const RecommendSchema = z.object({
+  ingredients: z.array(z.string().max(200)).max(200).default([]),
+  mood: z.string().max(50).nullable().default(null),
+  recentMeals: z.array(z.string().max(200)).max(50).default([]),
+  profile: ProfileSchema.default({}),
+});
+
+const WeeklyPlanSchema = z.object({
+  pantryItems: z.array(z.string().max(200)).max(200).default([]),
+  profile: ProfileSchema.default({}),
+  recentMeals: z.array(z.string().max(200)).max(50).default([]),
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types (inferred from schemas)
+// ─────────────────────────────────────────────────────────────────────────────
+
+type RecommendRequest = z.infer<typeof RecommendSchema>;
 
 interface WeatherContext {
   tempC: number;
@@ -349,15 +364,12 @@ function getFallbackMeal(
 ) {
   let pool = [...FALLBACK_MEALS];
 
-  // Filter by temperature suitability
   if (weather?.isHot) pool = pool.filter((m) => m.tempRange !== "cold");
   if (weather?.isCold) pool = pool.filter((m) => m.tempRange !== "hot");
 
-  // Prefer mood match
   const moodMatches = mood ? pool.filter((m) => m.mood === mood) : [];
   const workingPool = moodMatches.length > 0 ? moodMatches : pool;
 
-  // Score by pantry match
   const pantrySet = new Set(pantryIngredients.map((i) => i.toLowerCase()));
   const scored = workingPool.map((m) => {
     const matched = m.ingredients.filter((ing) => pantrySet.has(ing.toLowerCase())).length;
@@ -366,7 +378,6 @@ function getFallbackMeal(
   });
   scored.sort((a, b) => b.ratio - a.ratio);
 
-  // Pick highest scoring or fall back to time-of-day rotation
   const picked = scored[0]?.m ?? workingPool[new Date().getHours() % workingPool.length]!;
 
   const missingIngredients = pantryIngredients.length > 0
@@ -438,14 +449,16 @@ function getFallbackWeeklyPlan(): any[] {
 // POST /api/meals/recommend
 // ─────────────────────────────────────────────────────────────────────────────
 
-router.post("/recommend", async (req, res) => {
-  const body = req.body as RecommendRequest;
-  const { ingredients, mood, recentMeals, profile } = body;
+router.post("/recommend", async (req, res, next) => {
+  const parsed = RecommendSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
+    return;
+  }
 
-  // Gather all context in parallel — none of these block the response if they fail
-  const [weather] = await Promise.all([
-    fetchWeatherContext(),
-  ]);
+  const { ingredients, mood, recentMeals, profile } = parsed.data as RecommendRequest;
+
+  const [weather] = await Promise.all([fetchWeatherContext()]);
 
   const moodCtx = mood ? MOOD_CONTEXT[mood] ?? null : null;
   const dayCtx = getDayOfWeekContext();
@@ -551,11 +564,15 @@ Respond with ONLY valid JSON, no markdown, no explanation:
     };
 
     res.json(meal);
-  } catch {
-    // Fallback — weather-aware, pantry-scored
-    const fallback = getFallbackMeal(mood, profile.allergies, ingredients, weather);
-    const yt = await fetchYouTubeVideo(fallback.name);
-    res.json({ ...fallback, ...yt });
+  } catch (err) {
+    // Graceful fallback — weather-aware, pantry-scored
+    try {
+      const fallback = getFallbackMeal(mood, profile.allergies, ingredients, weather ?? null);
+      const yt = await fetchYouTubeVideo(fallback.name);
+      res.json({ ...fallback, ...yt });
+    } catch (fallbackErr) {
+      next(fallbackErr);
+    }
   }
 });
 
@@ -563,12 +580,14 @@ Respond with ONLY valid JSON, no markdown, no explanation:
 // POST /api/meals/weekly-plan
 // ─────────────────────────────────────────────────────────────────────────────
 
-router.post("/weekly-plan", async (req, res) => {
-  const { pantryItems, profile, recentMeals } = req.body as {
-    pantryItems: string[];
-    profile: RecommendRequest["profile"];
-    recentMeals: string[];
-  };
+router.post("/weekly-plan", async (req, res, next) => {
+  const parsed = WeeklyPlanSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: "Invalid request body", details: parsed.error.flatten() });
+    return;
+  }
+
+  const { pantryItems, profile, recentMeals } = parsed.data;
 
   const [weather] = await Promise.all([fetchWeatherContext()]);
   const budgetMap = { low: "under $10 per meal", medium: "$10–25 per meal", high: "no budget constraint" };
@@ -635,8 +654,7 @@ Respond with ONLY a valid JSON array of exactly 7 meals, no markdown:
     const jsonMatch = raw.match(/\[[\s\S]*\]/);
     if (!jsonMatch) throw new Error("No JSON array found");
 
-    const parsed = JSON.parse(jsonMatch[0]);
-    const meals = (Array.isArray(parsed) ? parsed : []).slice(0, 7).map((m: any) => ({
+    const meals = (JSON.parse(jsonMatch[0]) as any[]).slice(0, 7).map((m) => ({
       id: generateId(),
       name: m.name ?? "Meal",
       description: m.description ?? "",
@@ -648,8 +666,12 @@ Respond with ONLY a valid JSON array of exactly 7 meals, no markdown:
     }));
 
     res.json(meals);
-  } catch {
-    res.json(getFallbackWeeklyPlan());
+  } catch (err) {
+    try {
+      res.json(getFallbackWeeklyPlan());
+    } catch (fallbackErr) {
+      next(fallbackErr);
+    }
   }
 });
 

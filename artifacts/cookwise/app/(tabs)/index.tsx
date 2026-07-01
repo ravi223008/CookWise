@@ -60,10 +60,12 @@ export default function HomeScreen() {
   } = useApp();
   const { items: pantryItems } = usePantry();
   const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const ctaScale = useSharedValue(1);
 
   const fetchRecommendation = useCallback(async () => {
     setIsLoadingRecommendation(true);
+    setError(null);
     try {
       const meal = await getRecommendation({
         ingredients: pantryItems.map((i) => i.name),
@@ -72,8 +74,10 @@ export default function HomeScreen() {
         profile,
       });
       setTonightsMeal(meal);
-    } catch {
-      // fallback handled server-side
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Could not fetch a recommendation.";
+      setError(message);
     } finally {
       setIsLoadingRecommendation(false);
     }
@@ -140,7 +144,10 @@ export default function HomeScreen() {
               <Text style={[styles.greeting, { color: colors.mutedForeground }]}>
                 {getGreeting()} 👋
               </Text>
-              <Text style={[styles.name, { color: colors.foreground }]}>
+              <Text
+                style={[styles.name, { color: colors.foreground }]}
+                accessibilityRole="header"
+              >
                 {profile.name}
               </Text>
             </View>
@@ -157,6 +164,8 @@ export default function HomeScreen() {
                   elevation: 4,
                 },
               ]}
+              accessibilityRole="button"
+              accessibilityLabel={`${profile.name}'s profile`}
             >
               <Text style={[styles.avatarLetter, { color: colors.primaryForeground }]}>
                 {profile.name.charAt(0).toUpperCase()}
@@ -184,7 +193,7 @@ export default function HomeScreen() {
           style={styles.section}
         >
           <View style={styles.sectionRow}>
-            <Ionicons name="sparkles" size={15} color={colors.primary} />
+            <Ionicons name="sparkles" size={15} color={colors.primary} importantForAccessibility="no" />
             <Text style={[styles.sectionLabelPrimary, { color: colors.foreground }]}>
               Tonight's Recommendation
             </Text>
@@ -192,6 +201,29 @@ export default function HomeScreen() {
 
           {isLoadingRecommendation ? (
             <RecommendationCardSkeleton />
+          ) : error ? (
+            <View
+              style={[styles.errorCard, { backgroundColor: colors.card, borderColor: colors.border }]}
+              accessibilityRole="alert"
+            >
+              <Ionicons name="cloud-offline-outline" size={36} color={colors.mutedForeground} importantForAccessibility="no" />
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
+                Couldn't load a suggestion
+              </Text>
+              <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
+                {error}
+              </Text>
+              <Pressable
+                onPress={fetchRecommendation}
+                style={[styles.retryBtn, { backgroundColor: colors.primary }]}
+                accessibilityRole="button"
+                accessibilityLabel="Retry getting a meal suggestion"
+              >
+                <Text style={[styles.retryText, { color: colors.primaryForeground }]}>
+                  Try Again
+                </Text>
+              </Pressable>
+            </View>
           ) : tonightsMeal ? (
             <RecommendationCard
               meal={tonightsMeal}
@@ -205,7 +237,7 @@ export default function HomeScreen() {
                 { backgroundColor: colors.card, borderColor: colors.border },
               ]}
             >
-              <Ionicons name="restaurant-outline" size={36} color={colors.mutedForeground} />
+              <Ionicons name="restaurant-outline" size={36} color={colors.mutedForeground} importantForAccessibility="no" />
               <Text style={[styles.emptyTitle, { color: colors.foreground }]}>
                 No suggestion yet
               </Text>
@@ -215,6 +247,8 @@ export default function HomeScreen() {
               <Pressable
                 onPress={fetchRecommendation}
                 style={[styles.retryBtn, { backgroundColor: colors.primary }]}
+                accessibilityRole="button"
+                accessibilityLabel="Get a meal suggestion"
               >
                 <Text style={[styles.retryText, { color: colors.primaryForeground }]}>
                   Get Suggestion
@@ -243,8 +277,10 @@ export default function HomeScreen() {
                   elevation: 5,
                 },
               ]}
+              accessibilityRole="button"
+              accessibilityLabel="Decide my dinner — mood-based meal picker"
             >
-              <Ionicons name="sparkles" size={20} color={colors.accentForeground} />
+              <Ionicons name="sparkles" size={20} color={colors.accentForeground} importantForAccessibility="no" />
               <Text style={[styles.decideCtaText, { color: colors.accentForeground }]}>
                 Decide My Dinner
               </Text>
@@ -259,7 +295,7 @@ export default function HomeScreen() {
             style={[styles.section, { marginTop: 28 }]}
           >
             <View style={styles.sectionRow}>
-              <Ionicons name="time-outline" size={15} color={colors.mutedForeground} />
+              <Ionicons name="time-outline" size={15} color={colors.mutedForeground} importantForAccessibility="no" />
               <Text style={[styles.sectionLabel, { color: colors.mutedForeground }]}>
                 RECENTLY COOKED
               </Text>
@@ -270,6 +306,8 @@ export default function HomeScreen() {
                 styles.historyCard,
                 { backgroundColor: colors.card, borderColor: colors.border },
               ]}
+              accessibilityRole="list"
+              accessibilityLabel="Recently cooked meals"
             >
               {mealHistory.slice(0, 3).map((entry, idx) => (
                 <View
@@ -281,9 +319,11 @@ export default function HomeScreen() {
                       borderBottomWidth: idx < Math.min(mealHistory.length, 3) - 1 ? 1 : 0,
                     },
                   ]}
+                  accessibilityRole="text"
+                  accessibilityLabel={`${entry.mealName}, cooked on ${formatDate(entry.cookedAt)}`}
                 >
                   <View style={[styles.historyDot, { backgroundColor: colors.sageLight }]}>
-                    <Ionicons name="checkmark" size={13} color={colors.primary} />
+                    <Ionicons name="checkmark" size={13} color={colors.primary} importantForAccessibility="no" />
                   </View>
                   <Text
                     style={[styles.historyName, { color: colors.foreground }]}
@@ -380,6 +420,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+  errorCard: {
+    padding: 40,
+    borderRadius: 24,
+    borderWidth: 1,
+    alignItems: "center",
+    gap: 10,
+  },
   emptyTitle: {
     fontSize: 17,
     fontFamily: "Inter_600SemiBold",
@@ -389,6 +436,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: "Inter_400Regular",
     textAlign: "center",
+    lineHeight: 20,
   },
   retryBtn: {
     marginTop: 6,

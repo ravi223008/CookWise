@@ -12,6 +12,7 @@ import type { PantryItem } from "@/types";
 
 interface PantryState {
   items: PantryItem[];
+  isLoading: boolean;
   addItem: (name: string, quantity?: string) => void;
   removeItem: (id: string) => void;
   clearAll: () => void;
@@ -25,9 +26,13 @@ function generateId() {
 
 export function PantryProvider({ children }: { children: React.ReactNode }) {
   const [items, setItems] = useState<PantryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    load<PantryItem[]>(KEYS.PANTRY, []).then(setItems);
+    load<PantryItem[]>(KEYS.PANTRY, []).then((loaded) => {
+      setItems(loaded);
+      setIsLoading(false);
+    });
   }, []);
 
   const addItem = useCallback((name: string, quantity?: string) => {
@@ -61,8 +66,8 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ items, addItem, removeItem, clearAll }),
-    [items, addItem, removeItem, clearAll]
+    () => ({ items, isLoading, addItem, removeItem, clearAll }),
+    [items, isLoading, addItem, removeItem, clearAll]
   );
 
   return (

@@ -17,6 +17,7 @@ import type { Meal, PantryItem, ShoppingCategory, ShoppingList, ShoppingListItem
 
 interface ShoppingListState {
   list: ShoppingList | null;
+  isLoading: boolean;
   generateFromMeals: (meals: Meal[], pantryItems: PantryItem[]) => void;
   addItem: (name: string, quantity?: string) => void;
   toggleItem: (id: string) => void;
@@ -33,9 +34,13 @@ function makeId(): string {
 
 export function ShoppingListProvider({ children }: { children: React.ReactNode }) {
   const [list, setList] = useState<ShoppingList | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    load<ShoppingList | null>(KEYS.SHOPPING_LIST, null).then(setList);
+    load<ShoppingList | null>(KEYS.SHOPPING_LIST, null).then((loaded) => {
+      setList(loaded);
+      setIsLoading(false);
+    });
   }, []);
 
   const persist = useCallback((next: ShoppingList | null) => {
@@ -116,8 +121,8 @@ export function ShoppingListProvider({ children }: { children: React.ReactNode }
   }, [persist]);
 
   const value = useMemo(
-    () => ({ list, generateFromMeals, addItem, toggleItem, removeItem, clearChecked, clearAll }),
-    [list, generateFromMeals, addItem, toggleItem, removeItem, clearChecked, clearAll]
+    () => ({ list, isLoading, generateFromMeals, addItem, toggleItem, removeItem, clearChecked, clearAll }),
+    [list, isLoading, generateFromMeals, addItem, toggleItem, removeItem, clearChecked, clearAll]
   );
 
   return (

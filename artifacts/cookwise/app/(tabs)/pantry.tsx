@@ -2,6 +2,7 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useState } from "react";
 import {
+  ActivityIndicator,
   FlatList,
   Keyboard,
   Platform,
@@ -31,9 +32,13 @@ const PantryRow = React.memo(function PantryRow({
   }, [item.id, onDelete]);
 
   return (
-    <View style={[styles.row, { borderBottomColor: colors.border }]}>
+    <View
+      style={[styles.row, { borderBottomColor: colors.border }]}
+      accessibilityRole="text"
+      accessibilityLabel={`${item.name}${item.quantity ? `, ${item.quantity}` : ""}`}
+    >
       <View style={[styles.rowDot, { backgroundColor: colors.sageLight }]}>
-        <Ionicons name="leaf-outline" size={14} color={colors.primary} />
+        <Ionicons name="leaf-outline" size={14} color={colors.primary} importantForAccessibility="no" />
       </View>
       <View style={styles.rowText}>
         <Text style={[styles.rowName, { color: colors.foreground }]}>{item.name}</Text>
@@ -41,8 +46,13 @@ const PantryRow = React.memo(function PantryRow({
           <Text style={[styles.rowQty, { color: colors.mutedForeground }]}>{item.quantity}</Text>
         ) : null}
       </View>
-      <Pressable onPress={handleDelete} hitSlop={8}>
-        <Ionicons name="close-circle" size={22} color={colors.mutedForeground} />
+      <Pressable
+        onPress={handleDelete}
+        hitSlop={8}
+        accessibilityRole="button"
+        accessibilityLabel={`Remove ${item.name} from pantry`}
+      >
+        <Ionicons name="close-circle" size={22} color={colors.mutedForeground} importantForAccessibility="no" />
       </Pressable>
     </View>
   );
@@ -51,7 +61,7 @@ const PantryRow = React.memo(function PantryRow({
 export default function PantryScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { items, addItem, removeItem, clearAll } = usePantry();
+  const { items, isLoading, addItem, removeItem, clearAll } = usePantry();
   const [input, setInput] = useState("");
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
@@ -76,10 +86,23 @@ export default function PantryScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: topPad + 16, borderBottomColor: colors.border, backgroundColor: colors.background }]}>
-        <Text style={[styles.title, { color: colors.foreground }]}>Pantry</Text>
+      <View
+        style={[
+          styles.header,
+          { paddingTop: topPad + 16, borderBottomColor: colors.border, backgroundColor: colors.background },
+        ]}
+        accessibilityRole="header"
+      >
+        <Text style={[styles.title, { color: colors.foreground }]} accessibilityRole="header">
+          Pantry
+        </Text>
         {items.length > 0 && (
-          <Pressable onPress={clearAll} hitSlop={8}>
+          <Pressable
+            onPress={clearAll}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel="Clear all pantry items"
+          >
             <Text style={[styles.clearBtn, { color: colors.mutedForeground }]}>Clear all</Text>
           </Pressable>
         )}
@@ -89,44 +112,60 @@ export default function PantryScreen() {
       <View style={[styles.inputRow, { borderBottomColor: colors.border, backgroundColor: colors.background }]}>
         <TextInput
           style={[styles.input, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.card }]}
-          placeholder="Add ingredient..."
+          placeholder="Add ingredient…"
           placeholderTextColor={colors.mutedForeground}
           value={input}
           onChangeText={setInput}
           onSubmitEditing={handleAdd}
           returnKeyType="done"
+          accessibilityLabel="Ingredient name"
+          accessibilityHint="Type an ingredient name and tap Add"
         />
         <Pressable
           onPress={handleAdd}
           disabled={!input.trim()}
           style={[styles.addBtn, { backgroundColor: input.trim() ? colors.primary : colors.muted }]}
+          accessibilityRole="button"
+          accessibilityLabel="Add ingredient"
+          accessibilityState={{ disabled: !input.trim() }}
         >
-          <Ionicons name="add" size={22} color={input.trim() ? colors.primaryForeground : colors.mutedForeground} />
+          <Ionicons
+            name="add"
+            size={22}
+            color={input.trim() ? colors.primaryForeground : colors.mutedForeground}
+            importantForAccessibility="no"
+          />
         </Pressable>
       </View>
 
-      {/* List */}
-      <FlatList
-        data={items}
-        keyExtractor={(i) => i.id}
-        renderItem={renderItem}
-        contentContainerStyle={[
-          styles.list,
-          items.length === 0 && styles.listEmpty,
-          { paddingBottom: bottomPad + 80 },
-        ]}
-        scrollEnabled={!!items.length}
-        showsVerticalScrollIndicator={false}
-        ListEmptyComponent={
-          <View style={styles.empty}>
-            <Ionicons name="basket-outline" size={48} color={colors.mutedForeground} />
-            <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Pantry is empty</Text>
-            <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
-              Add ingredients above so CookWise can suggest meals you can actually make
-            </Text>
-          </View>
-        }
-      />
+      {/* Loading / List */}
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : (
+        <FlatList
+          data={items}
+          keyExtractor={(i) => i.id}
+          renderItem={renderItem}
+          contentContainerStyle={[
+            styles.list,
+            items.length === 0 && styles.listEmpty,
+            { paddingBottom: bottomPad + 80 },
+          ]}
+          scrollEnabled={!!items.length}
+          showsVerticalScrollIndicator={false}
+          ListEmptyComponent={
+            <View style={styles.empty}>
+              <Ionicons name="basket-outline" size={48} color={colors.mutedForeground} importantForAccessibility="no" />
+              <Text style={[styles.emptyTitle, { color: colors.foreground }]}>Pantry is empty</Text>
+              <Text style={[styles.emptyText, { color: colors.mutedForeground }]}>
+                Add ingredients above so CookWise can suggest meals you can actually make
+              </Text>
+            </View>
+          }
+        />
+      )}
     </View>
   );
 }
@@ -170,6 +209,11 @@ const styles = StyleSheet.create({
     width: 46,
     height: 46,
     borderRadius: 12,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  loadingContainer: {
+    flex: 1,
     alignItems: "center",
     justifyContent: "center",
   },
