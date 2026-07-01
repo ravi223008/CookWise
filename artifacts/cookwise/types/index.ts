@@ -83,6 +83,7 @@ export type Mood =
   | "healthy"
   | "kids"
   | "guests"
+  | "comfort"
   | null;
 
 // ─────────────────────────────────────────────

@@ -167,6 +167,11 @@ const MOOD_CONTEXT: Record<string, { vibe: string; effort: string; style: string
     effort: "worth it — 40–60 min, impressive but achievable",
     style: "shareable, centrepiece dish, visually stunning",
   },
+  comfort: {
+    vibe: "craving something deeply satisfying and cosy",
+    effort: "unhurried — 25–45 min, no-fuss cooking",
+    style: "rich, warming, nostalgic — the food equivalent of a hug",
+  },
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -282,6 +287,26 @@ const FALLBACK_MEALS = [
     matchScore: 96,
     ingredients: ["macaroni", "cheddar", "butter", "flour", "milk", "mustard", "breadcrumbs"],
     mood: "kids",
+    tempRange: "cold",
+  },
+  {
+    name: "Creamy Tomato Pasta",
+    description: "Velvety tomato sauce with a touch of cream, tossed through rigatoni — pure nostalgia in a bowl.",
+    cuisine: "Italian",
+    readyIn: 25,
+    matchScore: 95,
+    ingredients: ["rigatoni", "crushed tomatoes", "double cream", "garlic", "butter", "parmesan", "basil"],
+    mood: "comfort",
+    tempRange: "any",
+  },
+  {
+    name: "Slow-Cooked Beef Stew",
+    description: "Tender chunks of beef with root vegetables in a rich, deeply flavoured gravy.",
+    cuisine: "British",
+    readyIn: 45,
+    matchScore: 94,
+    ingredients: ["beef chuck", "potato", "carrot", "onion", "celery", "beef stock", "tomato paste", "thyme", "bay leaf"],
+    mood: "comfort",
     tempRange: "cold",
   },
   {

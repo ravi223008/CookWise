@@ -1,4 +1,3 @@
-import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import React, { useCallback, useEffect } from "react";
 import {
@@ -20,17 +19,18 @@ import type { Mood } from "@/types";
 interface MoodOption {
   key: Mood;
   label: string;
-  icon: string;
+  emoji: string;
 }
 
 const MOODS: MoodOption[] = [
-  { key: "tired", label: "Tired", icon: "moon-outline" },
-  { key: "romantic", label: "Romantic", icon: "heart-outline" },
-  { key: "budget", label: "Budget", icon: "cash-outline" },
-  { key: "protein", label: "Protein", icon: "barbell-outline" },
-  { key: "healthy", label: "Healthy", icon: "leaf-outline" },
-  { key: "kids", label: "Kids", icon: "happy-outline" },
-  { key: "guests", label: "Guests", icon: "people-outline" },
+  { key: "tired",   label: "Tired",        emoji: "😴" },
+  { key: "romantic", label: "Romantic",    emoji: "❤️" },
+  { key: "budget",  label: "Budget",       emoji: "💰" },
+  { key: "protein", label: "High Protein", emoji: "🏋" },
+  { key: "healthy", label: "Healthy",      emoji: "🥗" },
+  { key: "kids",    label: "Kids",         emoji: "👶" },
+  { key: "guests",  label: "Guests",       emoji: "🎉" },
+  { key: "comfort", label: "Comfort Food", emoji: "🍜" },
 ];
 
 interface MoodChipProps {
@@ -79,11 +79,7 @@ function MoodChip({ mood, isActive, onPress }: MoodChipProps) {
           },
         ]}
       >
-        <Ionicons
-          name={mood.icon as any}
-          size={15}
-          color={isActive ? colors.primaryForeground : colors.mutedForeground}
-        />
+        <Text style={styles.emoji}>{mood.emoji}</Text>
         <Text
           style={[
             styles.chipLabel,
@@ -143,6 +139,10 @@ const styles = StyleSheet.create({
     borderRadius: 100,
     borderWidth: 1,
     gap: 6,
+  },
+  emoji: {
+    fontSize: 15,
+    lineHeight: 18,
   },
   chipLabel: {
     fontSize: 13,
