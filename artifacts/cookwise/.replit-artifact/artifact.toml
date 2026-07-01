@@ -16,7 +16,7 @@ paths = [ "/" ]
 localPort = 19983
 
 [services.development]
-run = "pnpm --filter @workspace/cookwise run dev"
+run = "PORT=19983 pnpm --filter @workspace/cookwise run dev"
 
 [services.production]
 build = [ "pnpm", "--filter", "@workspace/cookwise", "run", "build" ]
