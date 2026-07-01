@@ -24,6 +24,7 @@ import { RecommendationCard, RecommendationCardSkeleton } from "@/components/Rec
 import { MoodSelector } from "@/components/MoodSelector";
 import { useApp } from "@/context/AppContext";
 import { usePantry } from "@/context/PantryContext";
+import type { Meal } from "@/types";
 import { useColors } from "@/hooks/useColors";
 import { getRecommendation } from "@/services/ai";
 
@@ -56,6 +57,18 @@ export default function HomeScreen() {
     setIsLoadingRecommendation,
   } = useApp();
   const { items: pantryItems } = usePantry();
+  const { getSnapshot, addFavorite, removeFavorite, isFavorite } = useKitchenMemory();
+
+  const handleFavorite = useCallback(
+    async (meal: Meal) => {
+      if (isFavorite(meal.id)) {
+        await removeFavorite(meal.id);
+      } else {
+        await addFavorite(meal);
+      }
+    },
+    [isFavorite, addFavorite, removeFavorite]
+  );
   const [refreshing, setRefreshing] = useState(false);
   const ctaScale = useSharedValue(1);
 
@@ -188,6 +201,8 @@ export default function HomeScreen() {
               meal={tonightsMeal}
               onCookNow={handleCookNow}
               onChooseAnother={fetchRecommendation}
+              onFavorite={handleFavorite}
+              isFavorited={isFavorite(tonightsMeal.id)}
             />
           ) : (
             <View
