@@ -9,6 +9,7 @@ export const KEYS = {
   KITCHEN_MEMORY: "cookwise:memory",
   FAMILY_MEMBERS: "cookwise:family",
   SHOPPING_LIST: "cookwise:shopping",
+  MOOD_STREAK: "cookwise:mood-streak",
 } as const;
 
 export async function load<T>(key: string, fallback: T): Promise<T> {

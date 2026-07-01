@@ -14,6 +14,7 @@ interface AppState {
   mealHistory: MealHistoryEntry[];
   tonightsMeal: Meal | null;
   selectedMood: Mood;
+  moodFrequency: Record<string, number>;
   isLoadingRecommendation: boolean;
   updateProfile: (update: Partial<UserProfile>) => void;
   addToHistory: (meal: Meal) => void;
@@ -31,26 +32,38 @@ const DEFAULT_PROFILE: UserProfile = {
   preferredCuisines: [],
 };
 
+function getTopMood(freq: Record<string, number>): Mood {
+  const entries = Object.entries(freq).filter(([, count]) => count > 0);
+  if (entries.length === 0) return null;
+  entries.sort((a, b) => b[1] - a[1]);
+  return (entries[0]![0] as Mood) ?? null;
+}
+
 const AppContext = createContext<AppState | null>(null);
 
 export function AppProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile>(DEFAULT_PROFILE);
   const [mealHistory, setMealHistory] = useState<MealHistoryEntry[]>([]);
   const [tonightsMeal, setTonightsMealState] = useState<Meal | null>(null);
-  const [selectedMood, setSelectedMood] = useState<Mood>(null);
+  const [selectedMood, setSelectedMoodState] = useState<Mood>(null);
+  const [moodFrequency, setMoodFrequency] = useState<Record<string, number>>({});
   const [isLoadingRecommendation, setIsLoadingRecommendation] = useState(false);
   const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     async function init() {
-      const [savedProfile, savedHistory, savedTonight] = await Promise.all([
+      const [savedProfile, savedHistory, savedTonight, savedMoodFreq] = await Promise.all([
         load<UserProfile>(KEYS.USER_PROFILE, DEFAULT_PROFILE),
         load<MealHistoryEntry[]>(KEYS.MEAL_HISTORY, []),
         load<Meal | null>(KEYS.TONIGHT_MEAL, null),
+        load<Record<string, number>>(KEYS.MOOD_STREAK, {}),
       ]);
       setProfile(savedProfile);
       setMealHistory(savedHistory);
       setTonightsMealState(savedTonight);
+      setMoodFrequency(savedMoodFreq);
+      const topMood = getTopMood(savedMoodFreq);
+      if (topMood) setSelectedMoodState(topMood);
       setLoaded(true);
     }
     init();
@@ -87,6 +100,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     save(KEYS.TONIGHT_MEAL, null);
   }, []);
 
+  const setSelectedMood = useCallback((mood: Mood) => {
+    setSelectedMoodState(mood);
+    if (mood) {
+      setMoodFrequency((prev) => {
+        const next = { ...prev, [mood]: (prev[mood] ?? 0) + 1 };
+        save(KEYS.MOOD_STREAK, next);
+        return next;
+      });
+    }
+  }, []);
+
   if (!loaded) return null;
 
   return (
@@ -96,6 +120,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         mealHistory,
         tonightsMeal,
         selectedMood,
+        moodFrequency,
         isLoadingRecommendation,
         updateProfile,
         addToHistory,
