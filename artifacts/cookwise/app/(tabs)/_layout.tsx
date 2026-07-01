@@ -15,10 +15,11 @@ interface TabConfig {
 }
 
 const TABS: TabConfig[] = [
-  { name: "index",   title: "Home",    icon: "home-outline",     activeIcon: "home" },
-  { name: "pantry",  title: "Pantry",  icon: "basket-outline",   activeIcon: "basket" },
-  { name: "planner", title: "Planner", icon: "calendar-outline", activeIcon: "calendar" },
-  { name: "profile", title: "Profile", icon: "person-outline",   activeIcon: "person" },
+  { name: "index",    title: "Home",     icon: "home-outline",     activeIcon: "home" },
+  { name: "pantry",   title: "Pantry",   icon: "basket-outline",   activeIcon: "basket" },
+  { name: "planner",  title: "Planner",  icon: "calendar-outline", activeIcon: "calendar" },
+  { name: "shopping", title: "Shopping", icon: "cart-outline",     activeIcon: "cart" },
+  { name: "profile",  title: "Profile",  icon: "person-outline",   activeIcon: "person" },
 ];
 
 export default function TabsLayout() {

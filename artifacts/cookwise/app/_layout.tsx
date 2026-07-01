@@ -17,6 +17,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { AppProvider } from "@/context/AppContext";
 import { PantryProvider } from "@/context/PantryContext";
+import { ShoppingListProvider } from "@/context/ShoppingListContext";
 
 // Set API base URL for all generated hooks
 if (process.env.EXPO_PUBLIC_DOMAIN) {
@@ -61,7 +62,9 @@ export default function RootLayout() {
             <KeyboardProvider>
               <AppProvider>
                 <PantryProvider>
-                  <RootLayoutNav />
+                  <ShoppingListProvider>
+                    <RootLayoutNav />
+                  </ShoppingListProvider>
                 </PantryProvider>
               </AppProvider>
             </KeyboardProvider>

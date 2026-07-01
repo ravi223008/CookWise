@@ -169,6 +169,35 @@ export interface KitchenMemoryRepository {
 }
 
 // ─────────────────────────────────────────────
+// Shopping list
+// ─────────────────────────────────────────────
+
+export type ShoppingCategory =
+  | "vegetables"
+  | "fruit"
+  | "dairy"
+  | "meat"
+  | "frozen"
+  | "pantry";
+
+export interface ShoppingListItem {
+  id: string;
+  name: string;
+  quantity?: string;
+  category: ShoppingCategory;
+  checked: boolean;
+  sourceRecipes: string[];
+  addedAt: string;
+}
+
+export interface ShoppingList {
+  id: string;
+  generatedAt: string;
+  sourceMeals: string[];
+  items: ShoppingListItem[];
+}
+
+// ─────────────────────────────────────────────
 // Planner
 // ─────────────────────────────────────────────
 

@@ -8,6 +8,7 @@ export const KEYS = {
   WEEKLY_PLAN: "cookwise:weekly",
   KITCHEN_MEMORY: "cookwise:memory",
   FAMILY_MEMBERS: "cookwise:family",
+  SHOPPING_LIST: "cookwise:shopping",
 } as const;
 
 export async function load<T>(key: string, fallback: T): Promise<T> {
