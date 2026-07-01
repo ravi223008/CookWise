@@ -169,6 +169,66 @@ export interface KitchenMemoryRepository {
 }
 
 // ─────────────────────────────────────────────
+// Receipt scanner
+// ─────────────────────────────────────────────
+
+/**
+ * Raw output from an OCR engine.
+ * Populated by an OcrAdapter implementation — left empty until OCR is wired in.
+ */
+export interface OcrResult {
+  rawText: string;
+  imagePath: string;
+  scannedAt: string;
+  /** Adapter that produced this result, e.g. "google-vision", "aws-textract", "apple-vision" */
+  adapterName: string;
+  /** Overall confidence reported by the OCR engine (0–1). -1 if unavailable. */
+  confidence: number;
+}
+
+/** A single line item extracted from a receipt. */
+export interface ReceiptLineItem {
+  /** The original, unmodified line from the OCR output. */
+  raw: string;
+  /** Cleaned, normalised item name ready for pantry insertion. */
+  name: string;
+  quantity?: number;
+  unit?: string;
+  price?: number;
+  currency?: string;
+  /** Parser confidence for this line (0–1). */
+  confidence: number;
+  /** True if heuristics suggest this is a non-food line (e.g. plastic bag, loyalty points). */
+  isNonFood: boolean;
+}
+
+/** Structured representation of a scanned receipt. */
+export interface ParsedReceipt {
+  storeName?: string;
+  storeAddress?: string;
+  date?: string;
+  items: ReceiptLineItem[];
+  subtotal?: number;
+  total?: number;
+  currency?: string;
+  parsedAt: string;
+  /** Name of the parser strategy used. */
+  parserStrategy: string;
+}
+
+/** Summary of what happened when a parsed receipt was applied to the pantry. */
+export interface PantryUpdateResult {
+  /** Items newly added to the pantry. */
+  added: string[];
+  /** Items that were already in the pantry (skipped to avoid duplicates). */
+  skipped: string[];
+  /** Items filtered out as non-food or unrecognisable. */
+  ignored: string[];
+  /** Any items that failed to save. */
+  errors: string[];
+}
+
+// ─────────────────────────────────────────────
 // Shopping list
 // ─────────────────────────────────────────────
 
