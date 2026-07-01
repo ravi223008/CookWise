@@ -660,8 +660,7 @@ const handleOpenAdd = useCallback(() => {
                   onPress={() => updateProfile({ budget: b.key })}
                   style={[
                     styles.budgetBtn,
-                    {
-                     { backgroundColor: isActive? colors.primary: colors.muted, flex: 1 },                    
+                    { backgroundColor: isActive ? colors.primary : colors.muted, flex: 1 },
                   ]}
                 >
                   <Text style={[styles.budgetText, { color: isActive ? colors.primaryForeground: colors.mutedForeground }]}>

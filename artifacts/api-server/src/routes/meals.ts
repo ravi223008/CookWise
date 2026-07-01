@@ -3,17 +3,23 @@ import OpenAI from "openai";
 
 const router = Router();
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
 function getOpenAI() {
   const apiKey = process.env["OPENAI_API_KEY"];
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY environment variable is not set");
-  }
+  if (!apiKey) throw new Error("OPENAI_API_KEY not set");
   return new OpenAI({ apiKey });
 }
 
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substring(2, 9);
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
 
 interface RecommendRequest {
   ingredients: string[];
@@ -28,44 +34,144 @@ interface RecommendRequest {
   };
 }
 
+interface WeatherContext {
+  tempC: number;
+  condition: string;
+  isHot: boolean;
+  isCold: boolean;
+  isRainy: boolean;
+  summary: string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Context builders
+// ─────────────────────────────────────────────────────────────────────────────
+
+async function fetchWeatherContext(): Promise<WeatherContext | null> {
+  try {
+    const resp = await fetch("https://wttr.in/?format=j1", {
+      headers: { "User-Agent": "CookWise/1.0" },
+      signal: AbortSignal.timeout(3000),
+    });
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as {
+      current_condition?: Array<{
+        temp_C?: string;
+        weatherDesc?: Array<{ value?: string }>;
+      }>;
+    };
+    const cond = data.current_condition?.[0];
+    if (!cond) return null;
+
+    const tempC = Number(cond.temp_C ?? "18");
+    const condition = cond.weatherDesc?.[0]?.value ?? "Clear";
+    const lc = condition.toLowerCase();
+    const isHot = tempC >= 28;
+    const isCold = tempC <= 10;
+    const isRainy = lc.includes("rain") || lc.includes("drizzle") || lc.includes("shower");
+
+    let summary: string;
+    if (isHot) summary = `hot (${tempC}°C, ${condition}) — favour lighter, fresher dishes; avoid heavy stews`;
+    else if (isCold) summary = `cold (${tempC}°C, ${condition}) — favour warming, hearty dishes; soups, stews, roasts`;
+    else if (isRainy) summary = `rainy (${tempC}°C, ${condition}) — comfort food is ideal; something warming and satisfying`;
+    else summary = `mild (${tempC}°C, ${condition}) — any style works well`;
+
+    return { tempC, condition, isHot, isCold, isRainy, summary };
+  } catch {
+    return null;
+  }
+}
+
+function getDayOfWeekContext(): { day: string; effort: string; style: string } {
+  const days = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  const day = days[new Date().getDay()]!;
+  const dow = new Date().getDay();
+
+  if (dow === 0) return { day, effort: "relaxed Sunday cooking — up to 60 min, something wholesome and satisfying", style: "Sunday roast or slow-cooked comfort food" };
+  if (dow === 6) return { day, effort: "leisurely weekend cooking — up to 50 min, worth the extra effort", style: "something to enjoy with time to spare" };
+  if (dow === 5) return { day, effort: "Friday treat — 25–40 min, slightly indulgent after a long week", style: "celebratory or takeaway-style at home" };
+  if (dow === 3) return { day, effort: "midweek practical — 20–30 min, something comforting and straightforward", style: "familiar, no-fuss comfort" };
+  return { day, effort: "weeknight efficient — 15–30 min max, quick and easy", style: "simple, reliable, minimal washing up" };
+}
+
+function getTimeOfDayContext(): string {
+  const h = new Date().getHours();
+  if (h < 11) return "morning (breakfast or brunch)";
+  if (h < 15) return "midday (lunch or light meal)";
+  if (h < 18) return "late afternoon (early dinner)";
+  return "evening (dinner)";
+}
+
+/** Ingredients that spoil quickly and should be prioritised */
+const PERISHABLE_KEYWORDS = [
+  "chicken", "beef", "pork", "lamb", "fish", "salmon", "tuna", "shrimp", "prawn",
+  "mince", "mincemeat", "steak", "bacon", "sausage",
+  "milk", "cream", "yoghurt", "yogurt", "creme fraiche", "sour cream",
+  "soft cheese", "ricotta", "mascarpone", "brie", "camembert",
+  "spinach", "lettuce", "rocket", "kale", "herbs", "coriander", "parsley", "basil",
+  "avocado", "tomato", "mushroom", "courgette", "zucchini",
+  "berries", "strawberries", "raspberries", "blueberries",
+  "tofu", "eggs",
+];
+
+function getPerishables(ingredients: string[]): string[] {
+  return ingredients.filter((ing) =>
+    PERISHABLE_KEYWORDS.some((k) => ing.toLowerCase().includes(k))
+  );
+}
+
+function getFamilySizeContext(size: number): string {
+  if (size === 1) return "cooking just for myself — single portion, quick and no leftovers needed";
+  if (size === 2) return "cooking for two — intimate meal, no need to batch cook";
+  if (size <= 4) return `cooking for ${size} people — family-sized portions, one main dish`;
+  return `cooking for ${size} people — large batch, needs to be crowd-pleasing and scalable`;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Mood config
+// ─────────────────────────────────────────────────────────────────────────────
+
 const MOOD_CONTEXT: Record<string, { vibe: string; effort: string; style: string }> = {
   tired: {
     vibe: "exhausted after a long day",
-    effort: "minimal — 15-25 min, one pan, very simple steps",
+    effort: "minimal — 15–25 min, one pan, very simple steps",
     style: "comforting, familiar, no complicated techniques",
   },
   romantic: {
     vibe: "planning a special evening for two",
-    effort: "worth the extra effort — 30-45 min, feels restaurant-quality",
+    effort: "worth the extra effort — 30–45 min, feels restaurant-quality",
     style: "elegant, beautifully presented, a little indulgent",
   },
   budget: {
     vibe: "watching spending this week",
-    effort: "practical — 20-30 min, economical ingredients, zero waste",
+    effort: "practical — 20–30 min, economical ingredients, zero waste",
     style: "hearty and satisfying without expensive items",
   },
   protein: {
     vibe: "focused on fitness and fuelling well",
-    effort: "straightforward — 20-35 min, high-protein focus",
+    effort: "straightforward — 20–35 min, high-protein focus",
     style: "substantial, macro-conscious, filling",
   },
   healthy: {
     vibe: "wanting to eat clean and feel good",
-    effort: "light — 15-30 min, fresh ingredients",
+    effort: "light — 15–30 min, fresh ingredients",
     style: "nutritious, balanced macros, light on heavy fats",
   },
   kids: {
     vibe: "feeding the whole family including picky eaters",
-    effort: "simple — 20-30 min, crowd-pleasing",
+    effort: "simple — 20–30 min, crowd-pleasing",
     style: "mild, fun, universally loved flavours — no exotic ingredients",
   },
   guests: {
     vibe: "impressing people coming over for dinner",
-    effort: "worth it — 40-60 min, impressive but achievable",
+    effort: "worth it — 40–60 min, impressive but achievable",
     style: "shareable, centrepiece dish, visually stunning",
   },
+};
 
-// ---------- Fallback meal bank ----------
+// ─────────────────────────────────────────────────────────────────────────────
+// Fallback meal bank
+// ─────────────────────────────────────────────────────────────────────────────
 
 const FALLBACK_MEALS = [
   {
@@ -76,6 +182,7 @@ const FALLBACK_MEALS = [
     matchScore: 94,
     ingredients: ["chicken breast", "butter", "heavy cream", "tomato puree", "garlic", "ginger", "garam masala", "cumin", "rice"],
     mood: null,
+    tempRange: "any",
   },
   {
     name: "Classic Spaghetti Carbonara",
@@ -85,6 +192,7 @@ const FALLBACK_MEALS = [
     matchScore: 91,
     ingredients: ["spaghetti", "pancetta", "eggs", "parmesan", "black pepper", "garlic"],
     mood: null,
+    tempRange: "cold",
   },
   {
     name: "Teriyaki Salmon Bowl",
@@ -94,6 +202,7 @@ const FALLBACK_MEALS = [
     matchScore: 92,
     ingredients: ["salmon fillet", "soy sauce", "honey", "mirin", "rice", "cucumber", "sesame seeds", "spring onions"],
     mood: "healthy",
+    tempRange: "any",
   },
   {
     name: "One-Pan Lemon Herb Chicken",
@@ -103,6 +212,7 @@ const FALLBACK_MEALS = [
     matchScore: 90,
     ingredients: ["chicken thighs", "lemon", "garlic", "rosemary", "thyme", "olive oil", "potatoes"],
     mood: null,
+    tempRange: "any",
   },
   {
     name: "Veggie Stir-Fry with Noodles",
@@ -112,6 +222,7 @@ const FALLBACK_MEALS = [
     matchScore: 88,
     ingredients: ["noodles", "broccoli", "bell pepper", "carrot", "soy sauce", "sesame oil", "garlic", "ginger"],
     mood: "healthy",
+    tempRange: "any",
   },
   {
     name: "Avocado Toast with Poached Eggs",
@@ -121,6 +232,7 @@ const FALLBACK_MEALS = [
     matchScore: 89,
     ingredients: ["sourdough bread", "avocado", "eggs", "lemon", "chilli flakes", "salt", "pepper"],
     mood: "tired",
+    tempRange: "hot",
   },
   {
     name: "Black Bean Tacos",
@@ -130,6 +242,7 @@ const FALLBACK_MEALS = [
     matchScore: 87,
     ingredients: ["tortillas", "black beans", "tomato", "onion", "coriander", "cumin", "lime", "avocado"],
     mood: "budget",
+    tempRange: "any",
   },
   {
     name: "Honey Garlic Shrimp",
@@ -139,6 +252,7 @@ const FALLBACK_MEALS = [
     matchScore: 93,
     ingredients: ["shrimp", "honey", "garlic", "butter", "soy sauce", "parsley", "rice"],
     mood: "romantic",
+    tempRange: "any",
   },
   {
     name: "Greek Chicken Souvlaki",
@@ -148,6 +262,7 @@ const FALLBACK_MEALS = [
     matchScore: 91,
     ingredients: ["chicken breast", "lemon", "oregano", "olive oil", "garlic", "pita", "cucumber", "yoghurt"],
     mood: "guests",
+    tempRange: "hot",
   },
   {
     name: "Beef & Broccoli",
@@ -157,6 +272,7 @@ const FALLBACK_MEALS = [
     matchScore: 90,
     ingredients: ["beef sirloin", "broccoli", "oyster sauce", "soy sauce", "garlic", "ginger", "sesame oil", "rice"],
     mood: "protein",
+    tempRange: "any",
   },
   {
     name: "Mac and Cheese",
@@ -166,35 +282,88 @@ const FALLBACK_MEALS = [
     matchScore: 96,
     ingredients: ["macaroni", "cheddar", "butter", "flour", "milk", "mustard", "breadcrumbs"],
     mood: "kids",
+    tempRange: "cold",
+  },
+  {
+    name: "Tomato Lentil Soup",
+    description: "Hearty red lentil soup with cumin, smoked paprika, and a squeeze of lemon.",
+    cuisine: "Middle Eastern",
+    readyIn: 30,
+    matchScore: 89,
+    ingredients: ["red lentils", "tomato", "onion", "garlic", "cumin", "smoked paprika", "vegetable stock", "lemon"],
+    mood: null,
+    tempRange: "cold",
+  },
+  {
+    name: "Prawn Mango Salad",
+    description: "Light, zesty salad with juicy prawns, fresh mango, and chilli-lime dressing.",
+    cuisine: "Thai",
+    readyIn: 15,
+    matchScore: 90,
+    ingredients: ["prawns", "mango", "cucumber", "red onion", "coriander", "lime", "fish sauce", "chilli"],
+    mood: "healthy",
+    tempRange: "hot",
+  },
+  {
+    name: "Mushroom Risotto",
+    description: "Silky Arborio rice with wild mushrooms, parmesan, and a splash of white wine.",
+    cuisine: "Italian",
+    readyIn: 40,
+    matchScore: 88,
+    ingredients: ["arborio rice", "mushrooms", "onion", "garlic", "white wine", "vegetable stock", "parmesan", "butter"],
+    mood: "romantic",
+    tempRange: "cold",
   },
 ];
 
-function getFallbackMeal(mood: string | null, allergies: string[], pantryIngredients: string[]) {
-  // Filter by mood if one is selected
-  const moodMatches = mood ? FALLBACK_MEALS.filter((m) => m.mood === mood) : [];
-  const pool = moodMatches.length > 0 ? moodMatches : FALLBACK_MEALS;
+function getFallbackMeal(
+  mood: string | null,
+  allergies: string[],
+  pantryIngredients: string[],
+  weather: WeatherContext | null,
+) {
+  let pool = [...FALLBACK_MEALS];
 
-  // Pick deterministically but vary by time-of-day
-  const hour = new Date().getHours();
-  const picked = pool[hour % pool.length]!;
+  // Filter by temperature suitability
+  if (weather?.isHot) pool = pool.filter((m) => m.tempRange !== "cold");
+  if (weather?.isCold) pool = pool.filter((m) => m.tempRange !== "hot");
 
-  // Calculate missing ingredients from pantry
+  // Prefer mood match
+  const moodMatches = mood ? pool.filter((m) => m.mood === mood) : [];
+  const workingPool = moodMatches.length > 0 ? moodMatches : pool;
+
+  // Score by pantry match
   const pantrySet = new Set(pantryIngredients.map((i) => i.toLowerCase()));
+  const scored = workingPool.map((m) => {
+    const matched = m.ingredients.filter((ing) => pantrySet.has(ing.toLowerCase())).length;
+    const ratio = pantryIngredients.length > 0 ? matched / m.ingredients.length : 0;
+    return { m, ratio };
+  });
+  scored.sort((a, b) => b.ratio - a.ratio);
+
+  // Pick highest scoring or fall back to time-of-day rotation
+  const picked = scored[0]?.m ?? workingPool[new Date().getHours() % workingPool.length]!;
+
   const missingIngredients = pantryIngredients.length > 0
     ? picked.ingredients.filter((ing) => !pantrySet.has(ing.toLowerCase())).slice(0, 3)
     : [];
 
   return {
     id: generateId(),
-    ...picked,
+    name: picked.name,
+    description: picked.description,
+    cuisine: picked.cuisine,
+    readyIn: picked.readyIn,
+    matchScore: picked.matchScore,
+    ingredients: picked.ingredients,
     missingIngredients,
     mood: mood ?? undefined,
   };
 }
 
-// ---------- Weekly plan fallback ----------
-
-// ---------- YouTube helper ----------
+// ─────────────────────────────────────────────────────────────────────────────
+// YouTube helper
+// ─────────────────────────────────────────────────────────────────────────────
 
 async function fetchYouTubeVideo(mealName: string): Promise<{
   youtubeVideoId: string | null;
@@ -230,102 +399,119 @@ function getFallbackWeeklyPlan(): any[] {
   const shuffled = [...FALLBACK_MEALS].sort(() => Math.random() - 0.5);
   return shuffled.slice(0, 7).map((m) => ({
     id: generateId(),
-    ...m,
+    name: m.name,
+    description: m.description,
+    cuisine: m.cuisine,
+    readyIn: m.readyIn,
+    matchScore: m.matchScore,
+    ingredients: m.ingredients,
     missingIngredients: [],
   }));
 }
 
-function getTimeOfDayContext(): string {
-  const h = new Date().getHours();
-  if (h < 11) return "morning (breakfast or brunch)";
-  if (h < 15) return "midday (lunch)";
-  if (h < 18) return "late afternoon (early dinner)";
-  return "evening (dinner)";
-}
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/meals/recommend
+// ─────────────────────────────────────────────────────────────────────────────
 
-
-/**
- * POST /api/meals/recommend
- * Returns a single AI-recommended meal
- */
 router.post("/recommend", async (req, res) => {
   const body = req.body as RecommendRequest;
   const { ingredients, mood, recentMeals, profile } = body;
 
-  const moodCtx = mood ? MOOD_CONTEXT[mood] : null;
+  // Gather all context in parallel — none of these block the response if they fail
+  const [weather] = await Promise.all([
+    fetchWeatherContext(),
+  ]);
+
+  const moodCtx = mood ? MOOD_CONTEXT[mood] ?? null : null;
+  const dayCtx = getDayOfWeekContext();
+  const timeOfDay = getTimeOfDayContext();
+  const familyCtx = getFamilySizeContext(profile.familySize);
+  const perishables = getPerishables(ingredients);
   const budgetMap = { low: "under $10 per meal", medium: "$10–25 per meal", high: "no budget constraint" };
   const budgetHint = budgetMap[profile.budget] ?? "$10–25 per meal";
-  const timeOfDay = getTimeOfDayContext();
 
-  const hasPantry = ingredients.length > 0;
-  const hasCuisinePrefs = profile.preferredCuisines.length > 0;
-  const hasAllergies = profile.allergies.length > 0;
-  const hasRecentMeals = recentMeals.length > 0;
+  const systemPrompt = `You are the user's personal AI Chef. You think like a thoughtful human chef who knows this person well: their energy, what's in their fridge, their family situation, their wallet, and what they've been eating all week. Your job is to make ONE confident dinner decision — not suggest options, not list ideas. Just pick the single best meal for this exact moment. Be decisive and specific.`;
 
-  const systemPrompt = `You are the user's personal AI Chef — not a recipe search engine. You think deeply about the person in front of you: their energy level tonight, what they have in the fridge, their family, their budget, and what they've been eating lately. Then you make ONE confident decision, as a great chef would.
+  const userPrompt = `Recommend ONE perfect dinner for tonight.
 
-Your job is to pick the single best meal for this specific person at this specific moment. Be decisive. Never hedge. Never list options. Commit to one recommendation with confidence.`;
+━━━ WHO I AM ━━━
+• Cooking for: ${familyCtx}
+• Budget tonight: ${budgetHint}
+• Allergies / must avoid: ${profile.allergies.length > 0 ? profile.allergies.join(", ") : "none"}
+• Cuisine preferences: ${profile.preferredCuisines.length > 0 ? profile.preferredCuisines.join(", ") : "open to anything"}
 
-  const userPrompt = `Make me a personalized dinner recommendation.
+━━━ RIGHT NOW ━━━
+• Today: ${dayCtx.day} — ${dayCtx.effort}
+• Time of day: ${timeOfDay}
+• Cooking style for today: ${dayCtx.style}
+${moodCtx
+  ? `• Tonight's mood: ${mood} — I'm ${moodCtx.vibe}\n• Energy I have: ${moodCtx.effort}\n• What I'm craving: ${moodCtx.style}`
+  : "• No particular mood — just hungry and open to a great meal"
+}
 
-WHO I AM:
-- Name: ${profile.name}
-- Cooking for: ${profile.familySize} ${profile.familySize === 1 ? "person (myself)" : "people"}
-- Budget: ${budgetHint}
-- Allergies / dietary restrictions: ${hasAllergies? profile.allergies.join(", ") : "none"}
-- Cuisine preferences: ${hasCuisinePrefs? profile.preferredCuisines.join(", ") : "open to anything"}
+━━━ WEATHER ━━━
+${weather ? `• Current conditions: ${weather.summary}` : "• Weather unknown — choose something universally appealing"}
 
-RIGHT NOW:
-- Time of day: ${timeOfDay}
-- Tonight's mood/vibe: ${moodCtx? `${mood} — I'm ${moodCtx.vibe}`: "no particular mood, just hungry"}
-- Effort I can give: ${moodCtx? moodCtx.effort: "moderate — 20–40 min is fine"}
-- Style I want: ${moodCtx? moodCtx.style: "something satisfying and well-balanced"}
+━━━ MY PANTRY ━━━
+${ingredients.length > 0
+  ? `Available ingredients: ${ingredients.join(", ")}`
+  : "No pantry listed — assume basic staples: salt, pepper, olive oil, onion, garlic, eggs, butter, common dried spices, and standard dry goods"
+}
+${perishables.length > 0
+  ? `\n⚠️  USE THESE FIRST (they spoil quickly): ${perishables.join(", ")}`
+  : ""
+}
 
-WHAT'S IN MY PANTRY:
-${hasPantry? ingredients.join(", "): "I haven't listed ingredients — assume basic staples: salt, pepper, olive oil, onion, garlic, eggs, butter, and common dry goods"}
+━━━ MEAL HISTORY (avoid repeating these) ━━━
+${recentMeals.length > 0
+  ? recentMeals.join(", ")
+  : "No history yet — anything goes"
+}
 
-WHAT I'VE COOKED RECENTLY (avoid repeating these):
-${hasRecentMeals ? recentMeals.join(", ") : "nothing tracked yet"}
-
-DECISION RULES:
-1. Pick ONE meal. Be confident and decisive — as my personal chef, I trust your judgment.
-2. Prioritize what I can actually make with my pantry. Minimize shopping trips.
-3. Respect my allergies absolutely — no exceptions.
-4. Match the effort level to my mood. If I'm tired, keep it simple. If I have guests, impress them.
-5. Avoid repeating recent meals.
-6. matchScore reflects your true confidence. This is the right meal for me RIGHT NOW:
-   - 90–99: perfect fit — pantry match + mood + preferences all align
-   - 75–89: good fit — most criteria met, maybe 1–2 things to buy
-   - 60–74: acceptable — some compromises, or pantry is bare
-   If your confidence is below 70, still pick ONE meal, but lower the matchScore honestly.
+━━━ YOUR DECISION RULES ━━━
+1. Pick ONE meal only. Be confident. No hedging.
+2. Prioritise perishable ingredients — they spoil soon.
+3. Match the weather: heavy/warming food when cold or rainy; light/fresh when hot.
+4. Respect the day: quick and simple on weeknights; more ambitious on weekends.
+5. Mood overrides day context — if they're tired, keep it under 25 min regardless of Saturday.
+6. Avoid repeating recent meals AND their cuisine types (add variety).
+7. Respect allergies absolutely — zero exceptions.
+8. If family size > 3, ensure the meal is easily scalable and crowd-pleasing.
+9. matchScore = your true confidence this is the right meal RIGHT NOW:
+   - 90–99: perfect — pantry match + mood + weather + preferences all aligned
+   - 75–89: great — most criteria met, 1–2 items to buy
+   - 60–74: acceptable — pantry is bare or some compromise needed
 
 Respond with ONLY valid JSON, no markdown, no explanation:
 {
   "name": "Meal Name",
-  "description": "One enticing, specific sentence (max 100 chars) — mention a key flavor or technique",
+  "description": "One enticing, specific sentence (max 100 chars) — name a key flavour or technique",
   "cuisine": "Cuisine type",
   "readyIn": 30,
   "matchScore": 94,
   "ingredients": ["complete list of ingredients needed, 5–12 items"],
-  "missingIngredients": ["only items from ingredients[] that are NOT in the pantry list above"]
-}
+  "missingIngredients": ["items from ingredients[] that are NOT in the pantry above"]
+}`;
 
   try {
     const openai = getOpenAI();
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },],
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
       max_tokens: 600,
-      temperature: 0.75,
+      temperature: 0.72,
     });
 
     const raw = completion.choices[0]?.message?.content?.trim() ?? "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error("No JSON found in AI response");
+    if (!jsonMatch) throw new Error("No JSON in response");
 
     const parsed = JSON.parse(jsonMatch[0]);
     const yt = await fetchYouTubeVideo(parsed.name);
+
     const meal = {
       id: generateId(),
       name: parsed.name,
@@ -333,7 +519,7 @@ Respond with ONLY valid JSON, no markdown, no explanation:
       cuisine: parsed.cuisine,
       readyIn: Number(parsed.readyIn) || 30,
       matchScore: Math.min(99, Math.max(60, Number(parsed.matchScore) || 85)),
-      ingredients: Array.isArray(parsed.ingredients) ? parsed. ingredients : [],
+      ingredients: Array.isArray(parsed.ingredients) ? parsed.ingredients : [],
       missingIngredients: Array.isArray(parsed.missingIngredients) ? parsed.missingIngredients : [],
       mood: mood ?? undefined,
       ...yt,
@@ -341,17 +527,17 @@ Respond with ONLY valid JSON, no markdown, no explanation:
 
     res.json(meal);
   } catch {
-    // Fallback to curated meals when AI is unavailable (quota, no key, network)
-    const fallback = getFallbackMeal(mood, profile.allergies, ingredients);
+    // Fallback — weather-aware, pantry-scored
+    const fallback = getFallbackMeal(mood, profile.allergies, ingredients, weather);
     const yt = await fetchYouTubeVideo(fallback.name);
     res.json({ ...fallback, ...yt });
   }
 });
 
-/**
- * POST /api/meals/weekly-plan
- * Returns 7 meals for a weekly plan
- */
+// ─────────────────────────────────────────────────────────────────────────────
+// POST /api/meals/weekly-plan
+// ─────────────────────────────────────────────────────────────────────────────
+
 router.post("/weekly-plan", async (req, res) => {
   const { pantryItems, profile, recentMeals } = req.body as {
     pantryItems: string[];
@@ -359,41 +545,47 @@ router.post("/weekly-plan", async (req, res) => {
     recentMeals: string[];
   };
 
+  const [weather] = await Promise.all([fetchWeatherContext()]);
   const budgetMap = { low: "under $10 per meal", medium: "$10–25 per meal", high: "no budget constraint" };
   const budgetHint = budgetMap[profile.budget] ?? "$10–25 per meal";
-  const hasPantry = pantryItems.length > 0;
+  const perishables = getPerishables(pantryItems);
 
-  const systemPrompt = `You are a personal AI Chef creating a thoughtful 7-day dinner plan. Think like a professional meal planner who knows this family well. Balance nutrition, variety, and effort levels across the week (lighter midweek, more ambitious on weekends), and make smart use of shared ingredients to reduce shopping. Each meal should feel personally chosen — not randomly generated.`;
+  const systemPrompt = `You are a personal AI Chef creating a thoughtful 7-day dinner plan. Think like a professional meal planner: balance nutrition, variety, and effort across the week (lighter midweek, more ambitious on weekends). Make smart use of shared ingredients to reduce shopping. Account for weather — warming meals when it's cold, lighter meals when it's hot. Each meal should feel genuinely hand-picked, not randomly generated.`;
 
-const userPrompt = `Plan 7 dinners for the week ahead.
+  const userPrompt = `Plan 7 dinners for the week ahead.
 
-THE HOUSEHOLD:
-- Cooking for: ${profile.familySize} ${profile.familySize === 1 ? "person" : "people"}
-- Budget: ${budgetHint}
-- Allergies / restrictions: ${profile.allergies.length > 0 ? profile.allergies.join(", ") : "none"}
-- Cuisine preferences: ${profile.preferredCuisines.length > 0 ? profile.preferredCuisines.join(", ") : "open to variety"}
+━━━ THE HOUSEHOLD ━━━
+• Cooking for: ${profile.familySize} ${profile.familySize === 1 ? "person" : "people"}
+• Budget: ${budgetHint}
+• Allergies / restrictions: ${profile.allergies.length > 0 ? profile.allergies.join(", ") : "none"}
+• Cuisine preferences: ${profile.preferredCuisines.length > 0 ? profile.preferredCuisines.join(", ") : "open to variety"}
 
-PANTRY AVAILABLE:
-${hasPantry? pantryItems.join(", "): "basic staples only — salt, pepper, oil, onion, garlic, eggs, butter"}
+━━━ WEATHER ━━━
+${weather ? `Current conditions: ${weather.summary} — plan the week around this` : "Weather unknown — plan for variety"}
 
-RECENTLY COOKED (avoid repeating):
-${recentMeals.length > 0 ? recentMeals.join(", ") : "nothing tracked"}
+━━━ PANTRY AVAILABLE ━━━
+${pantryItems.length > 0 ? pantryItems.join(", ") : "Basic staples only — salt, pepper, oil, onion, garlic, eggs, butter"}
+${perishables.length > 0 ? `\n⚠️  Use these early in the week (they spoil): ${perishables.join(", ")}` : ""}
 
-PLANNING RULES:
-- Day 1–2 (Mon/Tue): Quick and easy, 20–30 min — start of the week energy
-- Day 3 (Wed): Something comforting mid-week
-- Day 4–5 (Thu/Fri): Slightly more exciting, still achievable after work
-- Day 6–7 (Sat/Sun): More ambitious or social — weekend cooking
-- Vary the cuisines across all 7 days — no repeated cuisine types
-- Rotate proteins: don't repeat the same protein two days in a row
-- Maximize pantry usage to minimize shopping
-- Each meal should feel genuinely appetizing, not like a placeholder
+━━━ RECENTLY COOKED (avoid repeating) ━━━
+${recentMeals.length > 0 ? recentMeals.join(", ") : "Nothing tracked yet"}
+
+━━━ PLANNING RULES ━━━
+• Monday–Tuesday: Quick and easy (20–30 min) — start of week energy
+• Wednesday: Comforting midweek meal
+• Thursday–Friday: More exciting but still achievable after work; Friday = slight treat
+• Saturday: More ambitious or social weekend cooking
+• Sunday: Wholesome, satisfying; roast or slow-cooked style
+• Use perishable pantry items in Day 1–2 meals
+• No repeated cuisine types across the 7 days
+• No repeated proteins two days in a row
+• Weather matters: if cold/rainy → lean warming; if hot → lean lighter
 
 Respond with ONLY a valid JSON array of exactly 7 meals, no markdown:
 [
   {
     "name": "Meal Name",
-    "description": "One specific, enticing sentence — mention a key flavor or technique",
+    "description": "One specific, enticing sentence — mention a key flavour or technique",
     "cuisine": "Cuisine type",
     "readyIn": 30,
     "matchScore": 90,
@@ -402,16 +594,16 @@ Respond with ONLY a valid JSON array of exactly 7 meals, no markdown:
   }
 ]`;
 
-Vary the cuisines. Keep meals practical for home cooking.`;
-
   try {
     const openai = getOpenAI();
     const completion = await openai.chat.completions.create({
       model: "gpt-4o-mini",
-      messages: [{ role: "system", content: systemPrompt },
-        { role: "user", content: userPrompt },],
-      max_tokens: 2000,
-      temperature: 0.85,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userPrompt },
+      ],
+      max_tokens: 2200,
+      temperature: 0.82,
     });
 
     const raw = completion.choices[0]?.message?.content?.trim() ?? "";

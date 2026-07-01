@@ -20,11 +20,13 @@ import Animated, {
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
-import { RecommendationCard, RecommendationCardSkeleton } from "@/components/RecommendationCard";
 import { MoodSelector } from "@/components/MoodSelector";
+import {
+  RecommendationCard,
+  RecommendationCardSkeleton,
+} from "@/components/RecommendationCard";
 import { useApp } from "@/context/AppContext";
 import { usePantry } from "@/context/PantryContext";
-import type { Meal } from "@/types";
 import { useColors } from "@/hooks/useColors";
 import { getRecommendation } from "@/services/ai";
 
@@ -57,18 +59,6 @@ export default function HomeScreen() {
     setIsLoadingRecommendation,
   } = useApp();
   const { items: pantryItems } = usePantry();
-  const { getSnapshot, addFavorite, removeFavorite, isFavorite } = useKitchenMemory();
-
-  const handleFavorite = useCallback(
-    async (meal: Meal) => {
-      if (isFavorite(meal.id)) {
-        await removeFavorite(meal.id);
-      } else {
-        await addFavorite(meal);
-      }
-    },
-    [isFavorite, addFavorite, removeFavorite]
-  );
   const [refreshing, setRefreshing] = useState(false);
   const ctaScale = useSharedValue(1);
 
@@ -83,7 +73,7 @@ export default function HomeScreen() {
       });
       setTonightsMeal(meal);
     } catch {
-      // silent — fallback handled server-side
+      // fallback handled server-side
     } finally {
       setIsLoadingRecommendation(false);
     }
@@ -193,16 +183,20 @@ export default function HomeScreen() {
           entering={FadeInDown.delay(160).springify().damping(20)}
           style={styles.section}
         >
+          <View style={styles.sectionRow}>
+            <Ionicons name="sparkles" size={15} color={colors.primary} />
+            <Text style={[styles.sectionLabelPrimary, { color: colors.foreground }]}>
+              Tonight's Recommendation
+            </Text>
+          </View>
 
-          {isLoadingRecommendation? (
+          {isLoadingRecommendation ? (
             <RecommendationCardSkeleton />
-          ): tonight's meal? (
+          ) : tonightsMeal ? (
             <RecommendationCard
               meal={tonightsMeal}
               onCookNow={handleCookNow}
               onChooseAnother={fetchRecommendation}
-              onFavorite={handleFavorite}
-              isFavorited={isFavorite(tonightsMeal.id)}
             />
           ) : (
             <View
@@ -216,7 +210,7 @@ export default function HomeScreen() {
                 No suggestion yet
               </Text>
               <Text style={[styles.emptySubtitle, { color: colors.mutedForeground }]}>
-                Tap below to find tonight's dinner
+                Tap below to find your dinner
               </Text>
               <Pressable
                 onPress={fetchRecommendation}
@@ -271,7 +265,12 @@ export default function HomeScreen() {
               </Text>
             </View>
 
-            <View style={[styles.historyCard, { backgroundColor: colors.card, borderColor: colors.border }]}>
+            <View
+              style={[
+                styles.historyCard,
+                { backgroundColor: colors.card, borderColor: colors.border },
+              ]}
+            >
               {mealHistory.slice(0, 3).map((entry, idx) => (
                 <View
                   key={entry.mealId}

@@ -1,79 +1,71 @@
-import {
-  Inter_400Regular,
-  Inter_500Medium,
-  Inter_600SemiBold,
-  Inter_700Bold,
-  useFonts,
-} from "@expo-google-fonts/inter";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { setBaseUrl } from "@workspace/api-client-react";
-import { Stack } from "expo-router";
-import * as SplashScreen from "expo-splash-screen";
-import React, { useEffect } from "react";
-import { GestureHandlerRootView } from "react-native-gesture-handler";
-import { KeyboardProvider } from "react-native-keyboard-controller";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { Ionicons } from "@expo/vector-icons";
+import { Tabs } from "expo-router";
+import React from "react";
+import { Platform } from "react-native";
 
-import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { AppProvider } from "@/context/AppContext";
-import { FamilyProvider } from "@/context/FamilyContext";
-import { KitchenMemoryProvider } from "@/context/KitchenMemoryContext";
-import { PantryProvider } from "@/context/PantryContext";
+import { useColors } from "@/hooks/useColors";
 
-// Set API base URL for all generated hooks
-if (process.env.EXPO_PUBLIC_DOMAIN) {
-  setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
+type IoniconName = React.ComponentProps<typeof Ionicons>["name"];
+
+interface TabConfig {
+  name: string;
+  title: string;
+  icon: IoniconName;
+  activeIcon: IoniconName;
 }
 
-SplashScreen.preventAutoHideAsync();
+const TABS: TabConfig[] = [
+  { name: "index",   title: "Home",    icon: "home-outline",     activeIcon: "home" },
+  { name: "pantry",  title: "Pantry",  icon: "basket-outline",   activeIcon: "basket" },
+  { name: "planner", title: "Planner", icon: "calendar-outline", activeIcon: "calendar" },
+  { name: "profile", title: "Profile", icon: "person-outline",   activeIcon: "person" },
+];
 
-const queryClient = new QueryClient();
-
-function RootLayoutNav() {
-  return (
-    <Stack screenOptions={{ headerBackTitle: "Back" }}>
-      <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-      <Stack.Screen name="decide" options={{ headerShown: false }} />
-      <Stack.Screen name="recommendation" options={{ headerShown: false }} />
-    </Stack>
-  );
-}
-
-export default function RootLayout() {
-  const [fontsLoaded, fontError] = useFonts({
-    Inter_400Regular,
-    Inter_500Medium,
-    Inter_600SemiBold,
-    Inter_700Bold,
-  });
-
-  useEffect(() => {
-    if (fontsLoaded || fontError) {
-      SplashScreen.hideAsync();
-    }
-  }, [fontsLoaded, fontError]);
-
-  if (!fontsLoaded && !fontError) return null;
+export default function TabsLayout() {
+  const colors = useColors();
 
   return (
-    <SafeAreaProvider>
-      <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <GestureHandlerRootView style={{ flex: 1 }}>
-            <KeyboardProvider>
-              <AppProvider>
-                <KitchenMemoryProvider>
-                  <FamilyProvider>
-                    <PantryProvider>
-                      <RootLayoutNav />
-                    </PantryProvider>
-                  </FamilyProvider>
-                </KitchenMemoryProvider>
-              </AppProvider>
-            </KeyboardProvider>
-          </GestureHandlerRootView>
-        </QueryClientProvider>
-      </ErrorBoundary>
-    </SafeAreaProvider>
+    <Tabs
+      screenOptions={{
+        headerShown: false,
+        tabBarActiveTintColor: colors.primary,
+        tabBarInactiveTintColor: colors.mutedForeground,
+        tabBarStyle: {
+          backgroundColor: colors.card,
+          borderTopColor: colors.border,
+          borderTopWidth: 1,
+          height: Platform.OS === "ios" ? 88 : 64,
+          paddingBottom: Platform.OS === "ios" ? 28 : 10,
+          paddingTop: 8,
+          shadowColor: "#000",
+          shadowOffset: { width: 0, height: -2 },
+          shadowOpacity: 0.06,
+          shadowRadius: 8,
+          elevation: 8,
+        },
+        tabBarLabelStyle: {
+          fontSize: 11,
+          fontFamily: "Inter_500Medium",
+          marginTop: 2,
+        },
+      }}
+    >
+      {TABS.map((tab) => (
+        <Tabs.Screen
+          key={tab.name}
+          name={tab.name}
+          options={{
+            title: tab.title,
+            tabBarIcon: ({ color, focused }) => (
+              <Ionicons
+                name={focused ? tab.activeIcon : tab.icon}
+                size={24}
+                color={color}
+              />
+            ),
+          }}
+        />
+      ))}
+    </Tabs>
   );
 }
