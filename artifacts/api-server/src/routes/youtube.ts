@@ -49,14 +49,14 @@ router.get("/search", async (req, res) => {
       return res.json({ videoId: null, title: null, thumbnail: null, configured: true });
     }
 
-    res.json({
+    return res.json({
       videoId: item.id.videoId,
       title: item.snippet.title,
       thumbnail: item.snippet.thumbnails?.medium?.url ?? null,
       configured: true,
     });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message ?? "YouTube search failed" });
+    return res.status(500).json({ error: err?.message ?? "YouTube search failed" });
   }
 });
 
