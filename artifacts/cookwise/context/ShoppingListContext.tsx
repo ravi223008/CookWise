@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -114,10 +115,13 @@ export function ShoppingListProvider({ children }: { children: React.ReactNode }
     persist(null);
   }, [persist]);
 
+  const value = useMemo(
+    () => ({ list, generateFromMeals, addItem, toggleItem, removeItem, clearChecked, clearAll }),
+    [list, generateFromMeals, addItem, toggleItem, removeItem, clearChecked, clearAll]
+  );
+
   return (
-    <ShoppingListContext.Provider
-      value={{ list, generateFromMeals, addItem, toggleItem, removeItem, clearChecked, clearAll }}
-    >
+    <ShoppingListContext.Provider value={value}>
       {children}
     </ShoppingListContext.Provider>
   );

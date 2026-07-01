@@ -3,8 +3,8 @@ import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useCallback, useState } from "react";
+import { Image } from "expo-image";
 import {
-  Image,
   Linking,
   Platform,
   Pressable,
@@ -155,7 +155,7 @@ export default function RecommendationScreen() {
                     <Image
                       source={{ uri: meal.youtubeThumbnail }}
                       style={StyleSheet.absoluteFillObject}
-                      resizeMode="cover"
+                      contentFit="cover"
                     />
                     <View style={styles.ytPlayOverlay}>
                       <Ionicons name="play-circle" size={36} color="#fff" />

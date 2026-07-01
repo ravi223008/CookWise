@@ -25,7 +25,7 @@ interface MealCardProps {
   compact?: boolean;
 }
 
-export function MealCard({ meal, onPress, compact = false }: MealCardProps) {
+export const MealCard = React.memo(function MealCard({ meal, onPress, compact = false }: MealCardProps) {
   const colors = useColors();
   const router = useRouter();
   const scale = useSharedValue(1);
@@ -131,7 +131,7 @@ export function MealCard({ meal, onPress, compact = false }: MealCardProps) {
       </Pressable>
     </Animated.View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   card: {

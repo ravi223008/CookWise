@@ -17,8 +17,19 @@ import { usePantry } from "@/context/PantryContext";
 import { useColors } from "@/hooks/useColors";
 import type { PantryItem } from "@/types";
 
-function PantryRow({ item, onDelete }: { item: PantryItem; onDelete: (id: string) => void }) {
+const PantryRow = React.memo(function PantryRow({
+  item,
+  onDelete,
+}: {
+  item: PantryItem;
+  onDelete: (id: string) => void;
+}) {
   const colors = useColors();
+  const handleDelete = useCallback(() => {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onDelete(item.id);
+  }, [item.id, onDelete]);
+
   return (
     <View style={[styles.row, { borderBottomColor: colors.border }]}>
       <View style={[styles.rowDot, { backgroundColor: colors.sageLight }]}>
@@ -30,18 +41,12 @@ function PantryRow({ item, onDelete }: { item: PantryItem; onDelete: (id: string
           <Text style={[styles.rowQty, { color: colors.mutedForeground }]}>{item.quantity}</Text>
         ) : null}
       </View>
-      <Pressable
-        onPress={() => {
-          if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-          onDelete(item.id);
-        }}
-        hitSlop={8}
-      >
+      <Pressable onPress={handleDelete} hitSlop={8}>
         <Ionicons name="close-circle" size={22} color={colors.mutedForeground} />
       </Pressable>
     </View>
   );
-}
+});
 
 export default function PantryScreen() {
   const colors = useColors();

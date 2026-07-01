@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -59,8 +60,13 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     save(KEYS.PANTRY, []);
   }, []);
 
+  const value = useMemo(
+    () => ({ items, addItem, removeItem, clearAll }),
+    [items, addItem, removeItem, clearAll]
+  );
+
   return (
-    <PantryContext.Provider value={{ items, addItem, removeItem, clearAll }}>
+    <PantryContext.Provider value={value}>
       {children}
     </PantryContext.Provider>
   );

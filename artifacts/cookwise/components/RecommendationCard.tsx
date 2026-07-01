@@ -2,8 +2,8 @@ import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
 import React, { useCallback, useEffect, useState } from "react";
+import { Image } from "expo-image";
 import {
-  Image,
   Platform,
   Pressable,
   StyleSheet,
@@ -65,7 +65,7 @@ function getMatchColor(
 const IMAGE_HEIGHT = 200;
 const SWIPE_THRESHOLD = 100;
 
-export function RecommendationCard({
+export const RecommendationCard = React.memo(function RecommendationCard({
   meal,
   onCookNow,
   onChooseAnother,
@@ -253,7 +253,7 @@ export function RecommendationCard({
                 <Image
                   source={{ uri: meal.youtubeThumbnail }}
                   style={styles.image}
-                  resizeMode="cover"
+                  contentFit="cover"
                 />
               ) : (
                 <LinearGradient
@@ -372,7 +372,7 @@ export function RecommendationCard({
       </GestureDetector>
     </View>
   );
-}
+});
 
 export function RecommendationCardSkeleton() {
   const colors = useColors();

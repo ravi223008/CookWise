@@ -1,2 +1,3 @@
 - [Metro cache stale file issue](metro-cache.md) — Metro serves old broken files even after disk write; must clear /tmp/metro-* before restart when syntax errors persist.
 - [Expo tabs layout](expo-tabs-layout.md) — app/(tabs)/_layout.tsx must ONLY define the Tabs navigator; never duplicate root providers there.
+- [Pre-existing TS error](preexisting-ts-error.md) — api-client-react dist not built is a pre-existing monorepo error, not from app changes.

@@ -8,6 +8,7 @@ import {
   Platform,
   Pressable,
   ScrollView,
+  Share,
   StyleSheet,
   Text,
   View,
@@ -103,6 +104,32 @@ export default function PlannerScreen() {
 
   const hasPlan = !isEmpty;
 
+  const handleShare = useCallback(async () => {
+    if (!hasPlan) return;
+    const lines = DAYS.map((day) => {
+      const meal = plan[day.key];
+      return meal
+        ? `${day.label}: ${meal.name} (${meal.readyIn} min)`
+        : `${day.label}: Not planned`;
+    });
+    const message = [
+      "🍽 My Week of Meals",
+      "",
+      ...lines,
+      "",
+      `📦 Shopping list: ${shoppingList.length} items`,
+      `⏱ Total cook time: ${cookTime} min`,
+      `💰 Est. grocery cost: ~$${estimatedCost}`,
+      "",
+      "Planned with CookWise 🤖",
+    ].join("\n");
+    try {
+      await Share.share({ message, title: "My Weekly Meal Plan" });
+    } catch {
+      // user dismissed
+    }
+  }, [hasPlan, plan, shoppingList.length, cookTime, estimatedCost]);
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <LinearGradient
@@ -116,6 +143,12 @@ export default function PlannerScreen() {
               AI-powered meal planning
             </Text>
           </View>
+          <View style={styles.headerActions}>
+            {hasPlan && (
+              <Pressable onPress={handleShare} hitSlop={10} style={styles.shareBtn}>
+                <Ionicons name="share-outline" size={20} color={colors.foreground} />
+              </Pressable>
+            )}
           <Pressable
             onPress={generatePlan}
             disabled={loading}
@@ -143,6 +176,7 @@ export default function PlannerScreen() {
               </>
             )}
           </Pressable>
+          </View>
         </View>
 
         {hasPlan && (
@@ -296,7 +330,7 @@ export default function PlannerScreen() {
   );
 }
 
-function StatPill({
+const StatPill = React.memo(function StatPill({
   icon,
   value,
   label,
@@ -314,9 +348,9 @@ function StatPill({
       <Text style={[styles.statLabel, { color: colors.mutedForeground }]}>{label}</Text>
     </View>
   );
-}
+});
 
-function DayCard({
+const DayCard = React.memo(function DayCard({
   dayShort,
   dayLabel,
   meal,
@@ -393,9 +427,9 @@ function DayCard({
       )}
     </Pressable>
   );
-}
+});
 
-function ShoppingListTab({
+const ShoppingListTab = React.memo(function ShoppingListTab({
   items,
   estimatedCost,
   budget,
@@ -506,7 +540,7 @@ function ShoppingListTab({
       )}
     </View>
   );
-}
+});
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
@@ -520,6 +554,18 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  shareBtn: {
+    width: 36,
+    height: 36,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: 18,
   },
   title: {
     fontSize: 28,

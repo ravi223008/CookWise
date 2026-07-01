@@ -98,7 +98,7 @@ interface MoodSelectorProps {
   onSelect: (mood: Mood) => void;
 }
 
-export function MoodSelector({ selected, onSelect }: MoodSelectorProps) {
+export const MoodSelector = React.memo(function MoodSelector({ selected, onSelect }: MoodSelectorProps) {
   const handleSelect = useCallback(
     (mood: Mood) => {
       onSelect(selected === mood ? null : mood);
@@ -122,7 +122,7 @@ export function MoodSelector({ selected, onSelect }: MoodSelectorProps) {
       ))}
     </ScrollView>
   );
-}
+});
 
 const styles = StyleSheet.create({
   container: {

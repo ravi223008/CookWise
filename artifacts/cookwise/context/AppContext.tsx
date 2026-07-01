@@ -3,6 +3,7 @@ import React, {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -111,25 +112,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const value = useMemo(
+    () => ({
+      profile,
+      mealHistory,
+      tonightsMeal,
+      selectedMood,
+      moodFrequency,
+      isLoadingRecommendation,
+      updateProfile,
+      addToHistory,
+      setTonightsMeal,
+      setSelectedMood,
+      setIsLoadingRecommendation,
+      clearTonightsMeal,
+    }),
+    [
+      profile,
+      mealHistory,
+      tonightsMeal,
+      selectedMood,
+      moodFrequency,
+      isLoadingRecommendation,
+      updateProfile,
+      addToHistory,
+      setTonightsMeal,
+      setSelectedMood,
+      setIsLoadingRecommendation,
+      clearTonightsMeal,
+    ]
+  );
+
   if (!loaded) return null;
 
   return (
-    <AppContext.Provider
-      value={{
-        profile,
-        mealHistory,
-        tonightsMeal,
-        selectedMood,
-        moodFrequency,
-        isLoadingRecommendation,
-        updateProfile,
-        addToHistory,
-        setTonightsMeal,
-        setSelectedMood,
-        setIsLoadingRecommendation,
-        clearTonightsMeal,
-      }}
-    >
+    <AppContext.Provider value={value}>
       {children}
     </AppContext.Provider>
   );
