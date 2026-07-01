@@ -1,7 +1,7 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
 import { LinearGradient } from "expo-linear-gradient";
-import React, { useCallback, useEffect } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
   Image,
   Platform,
@@ -12,7 +12,9 @@ import {
 } from "react-native";
 import { Gesture, GestureDetector } from "react-native-gesture-handler";
 import Animated, {
+  FadeIn,
   FadeInUp,
+  FadeOut,
   runOnJS,
   useAnimatedStyle,
   useSharedValue,
@@ -29,6 +31,8 @@ export interface RecommendationCardProps {
   meal: Meal;
   onCookNow: () => void;
   onChooseAnother: () => void;
+  onFavorite?: (meal: Meal) => void;
+  isFavorited?: boolean;
   label?: string;
 }
 
@@ -65,12 +69,16 @@ export function RecommendationCard({
   meal,
   onCookNow,
   onChooseAnother,
+  onFavorite,
+  isFavorited = false,
   label = "Today's Recommendation",
 }: RecommendationCardProps) {
   const colors = useColors();
+  const [reasonVisible, setReasonVisible] = useState(false);
 
   const cookScale = useSharedValue(1);
   const anotherScale = useSharedValue(1);
+  const heartScale = useSharedValue(1);
   const translateX = useSharedValue(0);
   const cardOpacity = useSharedValue(1);
   const swipeHintOpacity = useSharedValue(0);
@@ -79,6 +87,7 @@ export function RecommendationCard({
     translateX.value = 0;
     cardOpacity.value = 1;
     swipeHintOpacity.value = 0;
+    setReasonVisible(false);
   }, [meal.id]);
 
   const triggerChooseAnother = useCallback(() => {
@@ -109,12 +118,14 @@ export function RecommendationCard({
       }
     });
 
-
   const cookAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: cookScale.value }],
   }));
- const anotherAnimStyle = useAnimatedStyle(() => ({
+  const anotherAnimStyle = useAnimatedStyle(() => ({
     transform: [{ scale: anotherScale.value }],
+  }));
+  const heartAnimStyle = useAnimatedStyle(() => ({
+    transform: [{ scale: heartScale.value }],
   }));
   const cardAnimStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: translateX.value }],
@@ -140,13 +151,27 @@ export function RecommendationCard({
     onChooseAnother();
   }, [anotherScale, onChooseAnother]);
 
-  const matchColor = getMatchColor(meal.matchScore, colors);
+  const handleFavorite = useCallback(() => {
+    if (!onFavorite) return;
+    heartScale.value = withSpring(1.4, { duration: 120 }, () => {
+      heartScale.value = withSpring(1, { duration: 200 });
+    });
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    onFavorite(meal);
+  }, [onFavorite, heartScale, meal]);
 
+  const toggleReason = useCallback(() => {
+    if (Platform.OS !== "web") Haptics.selectionAsync();
+    setReasonVisible((v) => !v);
+  }, []);
+
+  const matchColor = getMatchColor(meal.matchScore, colors);
   const hasThumbnail = Boolean(meal.youtubeThumbnail);
+  const hasReason = Boolean(meal.matchReason);
 
   return (
     <View style={styles.swipeWrapper}>
-      {/* Swipe-left hint revealed behind the card */}
+      {/* Behind-card swipe hint */}
       <Animated.View style={[styles.swipeHint, swipeHintStyle]}>
         <Ionicons name="shuffle-outline" size={28} color={colors.primary} />
         <Text style={[styles.swipeHintText, { color: colors.primary }]}>New pick</Text>
@@ -154,155 +179,198 @@ export function RecommendationCard({
 
       <GestureDetector gesture={panGesture}>
         <Animated.View style={cardAnimStyle}>
-        <Animated.View
-          entering={FadeInUp.springify().damping(18).stiffness(120)}
-          style={[
-            styles.card,
-            { backgroundColor: colors.card, borderColor: colors.border },
-          ]}
-        >
-          {/* ── Card header ── */}
-          <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
-            <View style={styles.cardHeaderLeft}>
-              <View style={[styles.sparkDot, { backgroundColor: colors.sageLight }]}>
-                <Ionicons name="sparkles" size={12} color={colors.primary} />
-              </View>
-              <Text style={[styles.cardHeaderLabel, { color: colors.foreground }]}>
-                {label}
-              </Text>
-            </View>
-            <View style={styles.cardHeaderRight}>
-              <View style={[styles.matchBadgePill, { backgroundColor: matchColor }]}>
-                <Ionicons name="star" size={11} color="#fff" />
-                <Text style={styles.matchBadgePillText}>{meal.matchScore}%</Text>
-              </View>
-              <Ionicons name="chevron-back" size={14} color={colors.mutedForeground} style={{ opacity: 0.5 }} />
-            </View>
-          </View>
-
-          {/* ── Hero image ── */}
-          <View style={styles.imageContainer}>
-            {hasThumbnail ? (
-              <Image
-                source={{ uri: meal.youtubeThumbnail }}
-                style={styles.image}
-                resizeMode="cover"
-              />
-            ) : (
-              <LinearGradient
-                colors={[colors.sageLight, colors.muted]}
-                style={styles.placeholderImage}
-              >
-                <Text style={styles.cuisineEmoji}>{getCuisineEmoji(meal.cuisine)}</Text>
-              </LinearGradient>
-            )}
-            {hasThumbnail && (
-              <LinearGradient
-                colors={["transparent", "rgba(0,0,0,0.55)"]}
-                style={StyleSheet.absoluteFillObject}
-              />
-            )}
-            {hasThumbnail && (
-              <Text style={styles.imageTitle} numberOfLines={2}>
-                {meal.name}
-              </Text>
-            )}
-          </View>
-
-          {/* ── Body ── */}
-          <View style={styles.body}>
-            {!hasThumbnail && (
-              <Text style={[styles.mealName, { color: colors.foreground }]} numberOfLines={2}>
-                {meal.name}
-              </Text>
-            )}
-
-            <Text style={[styles.description, { color: colors.mutedForeground }]} numberOfLines={2}>
-              {meal.description}
-            </Text>
-
-            <View style={styles.metaRow}>
-              <View style={[styles.metaPill, { backgroundColor: colors.muted }]}>
-                <Ionicons name="time-outline" size={13} color={colors.mutedForeground} />
-                <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-                  {meal.readyIn} min
-                </Text>
-              </View>
-              <View style={[styles.metaPill, { backgroundColor: colors.muted }]}>
-                <Ionicons name="restaurant-outline" size={13} color={colors.mutedForeground} />
-                <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
-                  {meal.cuisine}
-                </Text>
-              </View>
-              {meal.missingIngredients.length > 0 && (
-                <View style={[styles.metaPill, { backgroundColor: colors.orangeLight }]}>
-                  <Ionicons name="cart-outline" size={13} color={colors.orange} />
-                  <Text style={[styles.metaText, { color: colors.orange }]}>
-                    {meal.missingIngredients.length} to buy
-                  </Text>
+          <Animated.View
+            entering={FadeInUp.springify().damping(18).stiffness(120)}
+            style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}
+          >
+            {/* ── Card header ── */}
+            <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
+              <View style={styles.cardHeaderLeft}>
+                <View style={[styles.sparkDot, { backgroundColor: colors.sageLight }]}>
+                  <Ionicons name="sparkles" size={12} color={colors.primary} />
                 </View>
+                <Text style={[styles.cardHeaderLabel, { color: colors.foreground }]}>
+                  {label}
+                </Text>
+              </View>
+
+              <View style={styles.cardHeaderRight}>
+                {onFavorite && (
+                  <Animated.View style={heartAnimStyle}>
+                    <Pressable
+                      onPress={handleFavorite}
+                      hitSlop={8}
+                      accessibilityLabel={isFavorited ? "Remove from favorites" : "Save to favorites"}
+                      accessibilityRole="button"
+                    >
+                      <Ionicons
+                        name={isFavorited ? "heart" : "heart-outline"}
+                        size={22}
+                        color={isFavorited ? colors.accent : colors.mutedForeground}
+                      />
+                    </Pressable>
+                  </Animated.View>
+                )}
+                <Pressable
+                  onPress={hasReason ? toggleReason : undefined}
+                  style={[styles.matchBadgePill, { backgroundColor: matchColor }]}
+                  accessibilityLabel={hasReason ? "View match reason" : undefined}
+                  accessibilityRole={hasReason ? "button" : "text"}
+                >
+                  <Ionicons name="star" size={11} color="#fff" />
+                  <Text style={styles.matchBadgePillText}>{meal.matchScore}%</Text>
+                  {hasReason && (
+                    <Ionicons
+                      name={reasonVisible ? "chevron-up" : "information-circle-outline"}
+                      size={11}
+                      color="#fff"
+                    />
+                  )}
+                </Pressable>
+              </View>
+            </View>
+
+            {/* ── Confidence reason panel ── */}
+            {reasonVisible && hasReason && (
+              <Animated.View
+                entering={FadeIn.duration(180)}
+                exiting={FadeOut.duration(140)}
+                style={[
+                  styles.reasonPanel,
+                  { backgroundColor: colors.sageLight, borderBottomColor: colors.border },
+                ]}
+              >
+                <Ionicons name="sparkles" size={13} color={colors.primary} style={{ marginTop: 1 }} />
+                <Text style={[styles.reasonText, { color: colors.sageDark }]}>
+                  {meal.matchReason}
+                </Text>
+              </Animated.View>
+            )}
+
+            {/* ── Hero image ── */}
+            <View style={styles.imageContainer}>
+              {hasThumbnail ? (
+                <Image
+                  source={{ uri: meal.youtubeThumbnail }}
+                  style={styles.image}
+                  resizeMode="cover"
+                />
+              ) : (
+                <LinearGradient
+                  colors={[colors.sageLight, colors.muted]}
+                  style={styles.placeholderImage}
+                >
+                  <Text style={styles.cuisineEmoji}>{getCuisineEmoji(meal.cuisine)}</Text>
+                </LinearGradient>
+              )}
+              {hasThumbnail && (
+                <LinearGradient
+                  colors={["transparent", "rgba(0,0,0,0.55)"]}
+                  style={StyleSheet.absoluteFillObject}
+                />
+              )}
+              {hasThumbnail && (
+                <Text style={styles.imageTitle} numberOfLines={2}>
+                  {meal.name}
+                </Text>
               )}
             </View>
 
-            <View style={styles.matchBarSection}>
-              <View style={styles.matchBarRow}>
-                <Text style={[styles.matchBarLabel, { color: colors.mutedForeground }]}>
-                  Ingredient match
+            {/* ── Body ── */}
+            <View style={styles.body}>
+              {!hasThumbnail && (
+                <Text style={[styles.mealName, { color: colors.foreground }]} numberOfLines={2}>
+                  {meal.name}
                 </Text>
-                <Text style={[styles.matchBarValue, { color: matchColor }]}>
-                  {meal.matchScore}%
-                </Text>
+              )}
+
+              <Text style={[styles.description, { color: colors.mutedForeground }]} numberOfLines={2}>
+                {meal.description}
+              </Text>
+
+              <View style={styles.metaRow}>
+                <View style={[styles.metaPill, { backgroundColor: colors.muted }]}>
+                  <Ionicons name="time-outline" size={13} color={colors.mutedForeground} />
+                  <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
+                    {meal.readyIn} min
+                  </Text>
+                </View>
+                <View style={[styles.metaPill, { backgroundColor: colors.muted }]}>
+                  <Ionicons name="restaurant-outline" size={13} color={colors.mutedForeground} />
+                  <Text style={[styles.metaText, { color: colors.mutedForeground }]}>
+                    {meal.cuisine}
+                  </Text>
+                </View>
+                {meal.missingIngredients.length > 0 && (
+                  <View style={[styles.metaPill, { backgroundColor: colors.orangeLight }]}>
+                    <Ionicons name="cart-outline" size={13} color={colors.orange} />
+                    <Text style={[styles.metaText, { color: colors.orange }]}>
+                      {meal.missingIngredients.length} to buy
+                    </Text>
+                  </View>
+                )}
               </View>
-              <View style={[styles.matchBarTrack, { backgroundColor: colors.muted }]}>
-                <View
-                  style={[
-                    styles.matchBarFill,
-                    {
-                      width: `${meal.matchScore}%` as unknown as number,
-                      backgroundColor: matchColor,
-                    },
-                  ]}
-                />
+
+              <View style={styles.matchBarSection}>
+                <View style={styles.matchBarRow}>
+                  <Text style={[styles.matchBarLabel, { color: colors.mutedForeground }]}>
+                    Ingredient match
+                  </Text>
+                  <Text style={[styles.matchBarValue, { color: matchColor }]}>
+                    {meal.matchScore}%
+                  </Text>
+                </View>
+                <View style={[styles.matchBarTrack, { backgroundColor: colors.muted }]}>
+                  <View
+                    style={[
+                      styles.matchBarFill,
+                      {
+                        width: `${meal.matchScore}%` as unknown as number,
+                        backgroundColor: matchColor,
+                      },
+                    ]}
+                  />
+                </View>
               </View>
+
+              <View style={styles.actions}>
+                <Animated.View style={[{ flex: 1 }, cookAnimStyle]}>
+                  <Pressable
+                    onPress={handleCookNow}
+                    style={[styles.cookBtn, { backgroundColor: colors.primary }]}
+                    accessibilityLabel="Cook this meal now"
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="checkmark-circle-outline" size={18} color={colors.primaryForeground} />
+                    <Text style={[styles.cookBtnText, { color: colors.primaryForeground }]}>
+                      Cook Now
+                    </Text>
+                  </Pressable>
+                </Animated.View>
+
+                <Animated.View style={[{ flex: 1 }, anotherAnimStyle]}>
+                  <Pressable
+                    onPress={handleChooseAnother}
+                    style={[styles.anotherBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
+                    accessibilityLabel="Get a different recipe suggestion"
+                    accessibilityRole="button"
+                  >
+                    <Ionicons name="shuffle-outline" size={18} color={colors.foreground} />
+                    <Text style={[styles.anotherBtnText, { color: colors.foreground }]}>
+                      Choose Another
+                    </Text>
+                  </Pressable>
+                </Animated.View>
+              </View>
+
+              <Text style={[styles.swipeTip, { color: colors.mutedForeground }]}>
+                ← Swipe left for a new suggestion
+              </Text>
             </View>
-
-            <View style={styles.actions}>
-              <Animated.View style={[{ flex: 1 }, cookAnimStyle]}>
-                <Pressable
-                  onPress={handleCookNow}
-                  style={[styles.cookBtn, { backgroundColor: colors.primary }]}
-                  accessibilityLabel="Cook this meal now"
-                  accessibilityRole="button"
-                >
-              <Ionicons name="checkmark-circle-outline" size={18} color={colors.primaryForeground} />
-              <Text style={[styles.cookBtnText, { color: colors.primaryForeground }]}>
-                Cook Now
-              </Text>
-            </Pressable>
           </Animated.View>
-
-          <Animated.View style={[{ flex: 1 }, anotherAnimStyle]}>
-            <Pressable
-              onPress={handleChooseAnother}
-              style={[styles.anotherBtn, { borderColor: colors.border, backgroundColor: colors.card }]}
-              accessibilityLabel="Get a different recipe suggestion"
-              accessibilityRole="button"
-            >
-              <Ionicons name="shuffle-outline" size={18} color={colors.foreground} />
-              <Text style={[styles.anotherBtnText, { color: colors.foreground }]}>
-                Choose Another
-              </Text>
-            </Pressable>
-          </Animated.View>
-        </View>
-        <Text style={[styles.swipeTip, { color: colors.mutedForeground }]}>
-              ← Swipe left for a new suggestion
-            </Text>
-          </View>
         </Animated.View>
-        </Animated.View>
-        </GestureDetector>
-        </View>    
+      </GestureDetector>
+    </View>
   );
 }
 
@@ -326,12 +394,10 @@ export function RecommendationCardSkeleton() {
     <Animated.View
       style={[styles.card, shimmer, { backgroundColor: colors.card, borderColor: colors.border }]}
     >
-      {/* Header skeleton */}
       <View style={[styles.cardHeader, { borderBottomColor: colors.border }]}>
         <View style={[styles.skeletonLine, { width: 160, height: 16, backgroundColor: colors.muted }]} />
         <View style={[styles.skeletonPill, { width: 52, height: 24, backgroundColor: colors.muted }]} />
       </View>
-      
       <View style={[styles.imageContainer, { backgroundColor: colors.muted }]} />
       <View style={[styles.body, { gap: 14 }]}>
         <View style={[styles.skeletonLine, { width: "72%", backgroundColor: colors.muted }]} />
@@ -380,7 +446,7 @@ const styles = StyleSheet.create({
     elevation: 6,
     zIndex: 1,
   },
-  
+
   cardHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -397,7 +463,7 @@ const styles = StyleSheet.create({
   cardHeaderRight: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
+    gap: 10,
   },
   sparkDot: {
     width: 26,
@@ -416,7 +482,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     paddingHorizontal: 10,
-    paddingVertical: 5,
+    paddingVertical: 6,
     borderRadius: 20,
   },
   matchBadgePillText: {
@@ -424,6 +490,22 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_700Bold",
     color: "#fff",
   },
+
+  reasonPanel: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  reasonText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 19,
+  },
+
   imageContainer: {
     height: IMAGE_HEIGHT,
     backgroundColor: "#EEF2EE",
@@ -452,6 +534,7 @@ const styles = StyleSheet.create({
     lineHeight: 28,
     letterSpacing: -0.3,
   },
+
   body: {
     padding: 18,
     gap: 12,
@@ -467,6 +550,7 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     lineHeight: 21,
   },
+
   metaRow: {
     flexDirection: "row",
     gap: 8,
@@ -484,6 +568,7 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: "Inter_500Medium",
   },
+
   matchBarSection: {
     gap: 7,
   },
@@ -509,6 +594,7 @@ const styles = StyleSheet.create({
     height: 6,
     borderRadius: 3,
   },
+
   actions: {
     flexDirection: "row",
     gap: 10,
@@ -539,6 +625,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontFamily: "Inter_600SemiBold",
   },
+
   swipeTip: {
     fontSize: 11,
     fontFamily: "Inter_400Regular",
@@ -546,6 +633,7 @@ const styles = StyleSheet.create({
     opacity: 0.5,
     marginTop: -4,
   },
+
   skeletonLine: {
     height: 22,
     borderRadius: 11,
