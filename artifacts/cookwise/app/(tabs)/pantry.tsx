@@ -1,12 +1,14 @@
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import React, { useCallback, useState } from "react";
+import { useRouter } from "expo-router";
+import React, { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
   Keyboard,
   Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -17,35 +19,128 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { usePantry } from "@/context/PantryContext";
 import { useColors } from "@/hooks/useColors";
 import type { PantryItem } from "@/types";
+import {
+  getDaysUntilExpiry,
+  getExpiryLabel,
+  getExpiryStatus,
+  isLowStock,
+  sortPantryItems,
+} from "@/utils/pantry";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Expiry badge
+// ─────────────────────────────────────────────────────────────────────────────
+
+function ExpiryBadge({ expiryDate }: { expiryDate?: string }) {
+  const colors = useColors();
+  const days = getDaysUntilExpiry(expiryDate);
+  const status = getExpiryStatus(expiryDate);
+  const label = getExpiryLabel(days);
+
+  if (status === "none") return null;
+
+  const bg =
+    status === "expired" ? "#EF444420"
+    : status === "critical" ? colors.orange + "22"
+    : status === "soon" ? "#F59E0B22"
+    : colors.sageLight;
+
+  const fg =
+    status === "expired" ? colors.destructive
+    : status === "critical" ? colors.orange
+    : status === "soon" ? "#D97706"
+    : colors.primary;
+
+  const icon =
+    status === "expired" ? "alert-circle"
+    : status === "critical" ? "warning"
+    : status === "soon" ? "time"
+    : "checkmark-circle-outline";
+
+  return (
+    <View style={[styles.expiryBadge, { backgroundColor: bg }]}>
+      <Ionicons name={icon as any} size={11} color={fg} />
+      <Text style={[styles.expiryBadgeText, { color: fg }]}>{label}</Text>
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Pantry row
+// ─────────────────────────────────────────────────────────────────────────────
 
 const PantryRow = React.memo(function PantryRow({
   item,
   onDelete,
+  onPress,
 }: {
   item: PantryItem;
   onDelete: (id: string) => void;
+  onPress: (item: PantryItem) => void;
 }) {
   const colors = useColors();
+  const status = getExpiryStatus(item.expiryDate);
+  const lowStock = isLowStock(item.quantity);
+
+  const dotBg =
+    status === "expired" ? "#EF444420"
+    : status === "critical" ? colors.orange + "22"
+    : status === "soon" ? "#F59E0B22"
+    : colors.sageLight;
+
+  const dotFg =
+    status === "expired" ? colors.destructive
+    : status === "critical" ? colors.orange
+    : status === "soon" ? "#D97706"
+    : colors.primary;
+
+  const dotIcon =
+    status === "expired" ? "alert-circle-outline"
+    : status === "critical" ? "warning-outline"
+    : status === "soon" ? "time-outline"
+    : "leaf-outline";
+
   const handleDelete = useCallback(() => {
     if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     onDelete(item.id);
   }, [item.id, onDelete]);
 
+  const handlePress = useCallback(() => {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    onPress(item);
+  }, [item, onPress]);
+
   return (
-    <View
-      style={[styles.row, { borderBottomColor: colors.border }]}
-      accessibilityRole="text"
-      accessibilityLabel={`${item.name}${item.quantity ? `, ${item.quantity}` : ""}`}
+    <Pressable
+      onPress={handlePress}
+      style={({ pressed }) => [
+        styles.row,
+        { borderBottomColor: colors.border, opacity: pressed ? 0.75 : 1 },
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${item.name}${item.quantity ? `, ${item.quantity}` : ""}. Tap to edit.`}
     >
-      <View style={[styles.rowDot, { backgroundColor: colors.sageLight }]}>
-        <Ionicons name="leaf-outline" size={14} color={colors.primary} importantForAccessibility="no" />
+      <View style={[styles.rowDot, { backgroundColor: dotBg }]}>
+        <Ionicons name={dotIcon as any} size={14} color={dotFg} importantForAccessibility="no" />
       </View>
+
       <View style={styles.rowText}>
         <Text style={[styles.rowName, { color: colors.foreground }]}>{item.name}</Text>
-        {item.quantity ? (
-          <Text style={[styles.rowQty, { color: colors.mutedForeground }]}>{item.quantity}</Text>
-        ) : null}
+        <View style={styles.rowMeta}>
+          {item.quantity ? (
+            <View style={[styles.qtyPill, { backgroundColor: lowStock ? colors.orangeLight : colors.muted }]}>
+              <Text style={[styles.qtyText, { color: lowStock ? colors.orange : colors.mutedForeground }]}>
+                {item.quantity}
+              </Text>
+              {lowStock && (
+                <Ionicons name="alert-circle" size={10} color={colors.orange} />
+              )}
+            </View>
+          ) : null}
+          {item.expiryDate ? <ExpiryBadge expiryDate={item.expiryDate} /> : null}
+        </View>
       </View>
+
       <Pressable
         onPress={handleDelete}
         hitSlop={8}
@@ -54,18 +149,107 @@ const PantryRow = React.memo(function PantryRow({
       >
         <Ionicons name="close-circle" size={22} color={colors.mutedForeground} importantForAccessibility="no" />
       </Pressable>
-    </View>
+    </Pressable>
   );
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Alerts banner
+// ─────────────────────────────────────────────────────────────────────────────
+
+function AlertsBanner({
+  expiringItems,
+  lowStockItems,
+}: {
+  expiringItems: PantryItem[];
+  lowStockItems: PantryItem[];
+}) {
+  const colors = useColors();
+  const [expanded, setExpanded] = useState(false);
+
+  if (expiringItems.length === 0 && lowStockItems.length === 0) return null;
+
+  return (
+    <View style={[styles.alertsWrapper, { backgroundColor: colors.orangeLight, borderColor: colors.orange + "30" }]}>
+      <Pressable
+        onPress={() => setExpanded((e) => !e)}
+        style={styles.alertsHeader}
+        accessibilityRole="button"
+        accessibilityLabel="Toggle alerts panel"
+      >
+        <View style={styles.alertsLeft}>
+          <Ionicons name="notifications" size={16} color={colors.orange} />
+          <Text style={[styles.alertsTitle, { color: colors.orange }]}>
+            {expiringItems.length > 0 && lowStockItems.length > 0
+              ? `${expiringItems.length} expiring · ${lowStockItems.length} low stock`
+              : expiringItems.length > 0
+              ? `${expiringItems.length} item${expiringItems.length > 1 ? "s" : ""} expiring soon`
+              : `${lowStockItems.length} item${lowStockItems.length > 1 ? "s" : ""} running low`}
+          </Text>
+        </View>
+        <Ionicons
+          name={expanded ? "chevron-up" : "chevron-down"}
+          size={16}
+          color={colors.orange}
+        />
+      </Pressable>
+
+      {expanded && (
+        <View style={styles.alertsBody}>
+          {expiringItems.length > 0 && (
+            <>
+              <Text style={[styles.alertsGroupTitle, { color: colors.orange }]}>Use these soon</Text>
+              {expiringItems.map((item) => {
+                const days = getDaysUntilExpiry(item.expiryDate);
+                return (
+                  <View key={item.id} style={styles.alertRow}>
+                    <Ionicons name="time-outline" size={13} color={colors.orange} />
+                    <Text style={[styles.alertRowName, { color: colors.foreground }]}>{item.name}</Text>
+                    <Text style={[styles.alertRowDetail, { color: colors.orange }]}>
+                      {getExpiryLabel(days)}
+                    </Text>
+                  </View>
+                );
+              })}
+            </>
+          )}
+          {lowStockItems.length > 0 && (
+            <>
+              <Text style={[styles.alertsGroupTitle, { color: colors.orange }]}>
+                {expiringItems.length > 0 ? "Running low" : "Low stock"}
+              </Text>
+              {lowStockItems.map((item) => (
+                <View key={item.id} style={styles.alertRow}>
+                  <Ionicons name="alert-circle-outline" size={13} color={colors.orange} />
+                  <Text style={[styles.alertRowName, { color: colors.foreground }]}>{item.name}</Text>
+                  <Text style={[styles.alertRowDetail, { color: colors.mutedForeground }]}>
+                    {item.quantity ?? "low"}
+                  </Text>
+                </View>
+              ))}
+            </>
+          )}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Main screen
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function PantryScreen() {
   const colors = useColors();
   const insets = useSafeAreaInsets();
-  const { items, isLoading, addItem, removeItem, clearAll } = usePantry();
+  const router = useRouter();
+  const { items, isLoading, expiringItems, lowStockItems, addItem, removeItem, clearAll } = usePantry();
   const [input, setInput] = useState("");
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
+
+  const sortedItems = useMemo(() => sortPantryItems(items), [items]);
 
   const handleAdd = useCallback(() => {
     const trimmed = input.trim();
@@ -76,11 +260,18 @@ export default function PantryScreen() {
     Keyboard.dismiss();
   }, [input, addItem]);
 
+  const handlePressItem = useCallback(
+    (item: PantryItem) => {
+      router.push({ pathname: "/pantry-item", params: { id: item.id } });
+    },
+    [router]
+  );
+
   const renderItem = useCallback(
     ({ item }: { item: PantryItem }) => (
-      <PantryRow item={item} onDelete={removeItem} />
+      <PantryRow item={item} onDelete={removeItem} onPress={handlePressItem} />
     ),
-    [removeItem]
+    [removeItem, handlePressItem]
   );
 
   return (
@@ -145,16 +336,22 @@ export default function PantryScreen() {
         </View>
       ) : (
         <FlatList
-          data={items}
+          data={sortedItems}
           keyExtractor={(i) => i.id}
           renderItem={renderItem}
           contentContainerStyle={[
             styles.list,
-            items.length === 0 && styles.listEmpty,
+            sortedItems.length === 0 && styles.listEmpty,
             { paddingBottom: bottomPad + 80 },
           ]}
-          scrollEnabled={!!items.length}
+          scrollEnabled
           showsVerticalScrollIndicator={false}
+          ListHeaderComponent={
+            <AlertsBanner
+              expiringItems={expiringItems}
+              lowStockItems={lowStockItems}
+            />
+          }
           ListEmptyComponent={
             <View style={styles.empty}>
               <Ionicons name="basket-outline" size={48} color={colors.mutedForeground} importantForAccessibility="no" />
@@ -218,17 +415,71 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   list: {
-    paddingTop: 8,
+    paddingTop: 0,
   },
   listEmpty: {
     flex: 1,
     justifyContent: "center",
   },
+  // Alerts banner
+  alertsWrapper: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 4,
+    borderRadius: 14,
+    borderWidth: 1,
+    overflow: "hidden",
+  },
+  alertsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  alertsLeft: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flex: 1,
+  },
+  alertsTitle: {
+    fontSize: 13,
+    fontFamily: "Inter_600SemiBold",
+  },
+  alertsBody: {
+    paddingHorizontal: 14,
+    paddingBottom: 12,
+    gap: 6,
+  },
+  alertsGroupTitle: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+    marginTop: 4,
+    marginBottom: 2,
+  },
+  alertRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  alertRowName: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+  },
+  alertRowDetail: {
+    fontSize: 12,
+    fontFamily: "Inter_400Regular",
+  },
+  // Row
   row: {
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 20,
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     gap: 12,
   },
@@ -238,23 +489,51 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     alignItems: "center",
     justifyContent: "center",
+    flexShrink: 0,
   },
   rowText: {
     flex: 1,
-    gap: 2,
+    gap: 4,
   },
   rowName: {
     fontSize: 15,
     fontFamily: "Inter_500Medium",
   },
-  rowQty: {
-    fontSize: 13,
-    fontFamily: "Inter_400Regular",
+  rowMeta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    flexWrap: "wrap",
+  },
+  qtyPill: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  qtyText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  expiryBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    borderRadius: 8,
+  },
+  expiryBadgeText: {
+    fontSize: 11,
+    fontFamily: "Inter_600SemiBold",
   },
   empty: {
     alignItems: "center",
     paddingHorizontal: 40,
     gap: 12,
+    paddingTop: 60,
   },
   emptyTitle: {
     fontSize: 20,
