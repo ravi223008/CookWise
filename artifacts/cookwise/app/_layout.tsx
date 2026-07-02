@@ -17,6 +17,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { AppProvider } from "@/context/AppContext";
+import { KitchenMemoryProvider } from "@/context/KitchenMemoryContext";
 import { PantryProvider } from "@/context/PantryContext";
 import { ShoppingListProvider } from "@/context/ShoppingListContext";
 
@@ -69,6 +70,7 @@ export default function RootLayout() {
         <QueryClientProvider client={queryClient}>
           <GestureHandlerRootView style={{ flex: 1 }}>
             <KeyboardProvider>
+              <KitchenMemoryProvider>
               <AppProvider>
                 <PantryProvider>
                   <ShoppingListProvider>
@@ -77,6 +79,7 @@ export default function RootLayout() {
                   </ShoppingListProvider>
                 </PantryProvider>
               </AppProvider>
+              </KitchenMemoryProvider>
             </KeyboardProvider>
           </GestureHandlerRootView>
         </QueryClientProvider>
