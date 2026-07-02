@@ -121,6 +121,20 @@ export interface DislikedIngredient {
   addedAt: string;
 }
 
+/**
+ * Dietary preferences and restrictions for a single household member.
+ * Stored in KitchenMemory so the AI can personalise for the whole family.
+ */
+export interface FamilyPreference {
+  name: string;
+  role: "adult" | "child" | "baby";
+  /** Hard allergies — never include, same weight as profile.allergies. */
+  allergies: string[];
+  /** Soft dislikes — avoid where possible, but not absolute. */
+  dislikes: string[];
+  spiceLevel: "none" | "mild" | "medium" | "hot";
+}
+
 export interface WeatherCondition {
   condition: "sunny" | "cloudy" | "rainy" | "cold" | "hot" | "snowy" | "windy";
   temperatureCelsius: number;
@@ -135,9 +149,34 @@ export interface WeatherCondition {
  */
 export interface KitchenMemory {
   userId?: string;
+
+  // ── Meal history & preferences ──────────────────────────────────────────
   favoriteMeals: FavoriteMeal[];
   dislikedIngredients: DislikedIngredient[];
+  /** Full cooking history — last 200 entries, newest first. */
   cookingHistory: CookingHistoryEntry[];
+
+  // ── Ingredient knowledge ────────────────────────────────────────────────
+  /**
+   * Ingredients that are always stocked (staples).
+   * The AI treats these as available and never marks them as "missing".
+   * Examples: olive oil, garlic, onion, salt, pepper, butter, eggs.
+   */
+  stapleIngredients: string[];
+  /**
+   * Ingredients that are rarely available.
+   * The AI avoids designing meals that depend on these.
+   */
+  rareIngredients: string[];
+
+  // ── Household ───────────────────────────────────────────────────────────
+  /**
+   * Per-person dietary preferences for everyone in the household.
+   * Allergies are consolidated to hard avoids; dislikes are soft signals.
+   */
+  familyPreferences: FamilyPreference[];
+
+  // ── Context ─────────────────────────────────────────────────────────────
   weather?: WeatherCondition;
   lastUpdated: string;
 }
@@ -147,9 +186,35 @@ export interface KitchenMemory {
  * Keeps the API payload lean while still giving the chef full context.
  */
 export interface KitchenMemorySnapshot {
+  // ── Meals ──────────────────────────────────────────────────────────────
+  /** Names of saved favourite meals — style and quality reference for the AI. */
   favoriteMealNames: string[];
+  /** Ingredients the user never wants — absolute avoid alongside allergies. */
   dislikedIngredients: string[];
+  /** Recent meal names from cooking history — AI avoids repeating these. */
   recentlyCooked: string[];
+
+  // ── Ingredient knowledge ────────────────────────────────────────────────
+  /** Always in the kitchen — never listed as missing by the AI. */
+  stapleIngredients: string[];
+  /** Rarely stocked — AI does not plan meals that depend on these. */
+  rareIngredients: string[];
+
+  // ── Household ───────────────────────────────────────────────────────────
+  /** Consolidated hard allergies from all family members. */
+  familyAllergies: string[];
+  /** Consolidated soft dislikes from all family members. */
+  familyDislikes: string[];
+
+  // ── Behavioural signals ─────────────────────────────────────────────────
+  /** Cuisine → count from cooking history; drives variety nudges in prompts. */
+  cuisineFrequency: Record<string, number>;
+  /** Budget level from profile — included so the server prompt has full context. */
+  budget: string;
+  /** Current season derived at snapshot time: spring | summer | autumn | winter. */
+  season: string;
+
+  // ── Context ─────────────────────────────────────────────────────────────
   weather?: Pick<WeatherCondition, "condition" | "temperatureCelsius" | "description">;
 }
 
@@ -159,14 +224,39 @@ export interface KitchenMemorySnapshot {
  * without changing any context or component code.
  */
 export interface KitchenMemoryRepository {
+  // ── Read / write ────────────────────────────────────────────────────────
   getMemory(): Promise<KitchenMemory>;
   saveMemory(memory: KitchenMemory): Promise<void>;
+
+  // ── Favourites ──────────────────────────────────────────────────────────
   addFavorite(meal: FavoriteMeal): Promise<void>;
   removeFavorite(mealId: string): Promise<void>;
+
+  // ── Disliked ingredients ────────────────────────────────────────────────
   addDislikedIngredient(ingredient: DislikedIngredient): Promise<void>;
   removeDislikedIngredient(name: string): Promise<void>;
+
+  // ── Cooking history ─────────────────────────────────────────────────────
   addCookingHistoryEntry(entry: CookingHistoryEntry): Promise<void>;
+
+  // ── Context signals ─────────────────────────────────────────────────────
   setWeather(weather: WeatherCondition): Promise<void>;
+
+  // ── Ingredient knowledge ────────────────────────────────────────────────
+  setStapleIngredients(ingredients: string[]): Promise<void>;
+  setRareIngredients(ingredients: string[]): Promise<void>;
+
+  // ── Household ───────────────────────────────────────────────────────────
+  setFamilyPreferences(preferences: FamilyPreference[]): Promise<void>;
+
+  // ── Snapshot builder ────────────────────────────────────────────────────
+  /**
+   * Derives and returns a lean KitchenMemorySnapshot ready to be sent to the
+   * API server as part of a meal recommendation request.
+   *
+   * @param budget - Current budget level from UserProfile.
+   */
+  buildSnapshot(budget: string): Promise<KitchenMemorySnapshot>;
 }
 
 // ─────────────────────────────────────────────
