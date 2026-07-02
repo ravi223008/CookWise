@@ -30,11 +30,31 @@ const ProfileSchema = z.object({
   preferredCuisines: z.array(z.string().max(100)).max(20).default([]),
 });
 
+const MemorySnapshotSchema = z
+  .object({
+    favoriteMealNames: z.array(z.string().max(200)).max(50).default([]),
+    dislikedIngredients: z.array(z.string().max(200)).max(200).default([]),
+    recentlyCooked: z.array(z.string().max(200)).max(50).default([]),
+    stapleIngredients: z.array(z.string().max(200)).max(100).default([]),
+    rareIngredients: z.array(z.string().max(200)).max(100).default([]),
+    familyAllergies: z.array(z.string().max(200)).max(50).default([]),
+    familyDislikes: z.array(z.string().max(200)).max(200).default([]),
+    cuisineFrequency: z
+      .record(z.string().max(100), z.number().int().min(0).max(999))
+      .default({}),
+    budget: z.string().max(50).default("medium"),
+    season: z.string().max(20).default(""),
+  })
+  .optional();
+
+type MemorySnapshot = NonNullable<z.infer<typeof MemorySnapshotSchema>>;
+
 const RecommendSchema = z.object({
   ingredients: z.array(z.string().max(200)).max(200).default([]),
   mood: z.string().max(50).nullable().default(null),
   recentMeals: z.array(z.string().max(200)).max(50).default([]),
   profile: ProfileSchema.default({}),
+  memory: MemorySnapshotSchema,
 });
 
 const WeeklyPlanSchema = z.object({
