@@ -11,11 +11,18 @@ export interface Meal {
   readyIn: number;
   matchScore: number;
   matchReason?: string;
+  /** Chef's plain-English explanation of why this meal was chosen. */
+  chefReason?: string;
   cuisine: string;
   mood?: string;
   youtubeVideoId?: string;
   youtubeTitle?: string;
   youtubeThumbnail?: string;
+  /**
+   * Only present when confidence < 70.
+   * 2–3 backup meals the chef considered before settling on the primary pick.
+   */
+  alternatives?: Omit<Meal, "alternatives">[];
 }
 
 export type PantryCategory =

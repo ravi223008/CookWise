@@ -9,6 +9,44 @@ args = ["pnpm", "store", "prune"]
 env = { "CI" = "true" }
 
 [workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start api-server"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Start cookwise"
+
+[[workflows.workflow]]
+name = "Start api-server"
+author = "agent"
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "cd artifacts/api-server && PORT=3001 pnpm run dev"
+waitForPort = 3001
+
+[[workflows.workflow]]
+name = "Start cookwise"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=19983 pnpm --filter @workspace/cookwise run dev"
+waitForPort = 19983
+
+[workflows.workflow.metadata]
+outputType = "webview"
 
 [agent]
 stack = "PNPM_WORKSPACE"

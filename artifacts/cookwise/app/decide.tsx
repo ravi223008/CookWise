@@ -49,14 +49,31 @@ export default function DecideScreen() {
       .map((s) => s.trim())
       .filter(Boolean);
 
-    const allIngredients = [
-      ...pantryItems.map((i) => i.name),
-      ...extra,
-    ];
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const pantryForRecommend = pantryItems.map((item) => {
+      let daysUntilExpiry: number | undefined;
+      if (item.expiryDate) {
+        const exp = new Date(item.expiryDate);
+        exp.setHours(0, 0, 0, 0);
+        daysUntilExpiry = Math.round((exp.getTime() - today.getTime()) / 86_400_000);
+      }
+      return {
+        name: item.name,
+        expiryDate: item.expiryDate,
+        daysUntilExpiry,
+      };
+    });
+
+    const extraAsItems = extra.map((name) => ({ name }));
+    const allPantryItems = [...pantryForRecommend, ...extraAsItems];
+    const allIngredients = allPantryItems.map((i) => i.name);
 
     try {
       const meal = await getRecommendation({
         ingredients: allIngredients,
+        pantryItems: allPantryItems,
         mood,
         recentMeals: mealHistory.slice(0, 7).map((h) => h.mealName),
         profile,

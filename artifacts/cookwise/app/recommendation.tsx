@@ -26,16 +26,20 @@ export default function RecommendationScreen() {
   const params = useLocalSearchParams<{ meal: string }>();
   const { addToHistory } = useApp();
   const [cooked, setCooked] = useState(false);
+  const [activeMeal, setActiveMeal] = useState<Meal | null>(null);
 
   const topPad = Platform.OS === "web" ? 67 : insets.top;
   const bottomPad = Platform.OS === "web" ? 34 : insets.bottom;
 
-  let meal: Meal | null = null;
+  let parsedMeal: Meal | null = null;
   try {
-    meal = params.meal ? (JSON.parse(params.meal) as Meal) : null;
+    parsedMeal = params.meal ? (JSON.parse(params.meal) as Meal) : null;
   } catch {
-    meal = null;
+    parsedMeal = null;
   }
+
+  const meal = activeMeal ?? parsedMeal;
+  const originalMeal = parsedMeal;
 
   const handleCooked = useCallback(() => {
     if (!meal) return;
@@ -49,6 +53,15 @@ export default function RecommendationScreen() {
     const url = `https://www.youtube.com/watch?v=${meal.youtubeVideoId}`;
     Linking.openURL(url);
   }, [meal]);
+
+  const switchToAlternative = useCallback((alt: NonNullable<Meal["alternatives"]>[number]) => {
+    if (Platform.OS !== "web") Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setCooked(false);
+    setActiveMeal({
+      ...alt,
+      alternatives: originalMeal?.alternatives,
+    } as Meal);
+  }, [originalMeal]);
 
   if (!meal) {
     return (
@@ -67,6 +80,9 @@ export default function RecommendationScreen() {
       : meal.matchScore >= 70
         ? colors.orange
         : colors.mutedForeground;
+
+  const isLowConfidence = (originalMeal?.matchScore ?? meal.matchScore) < 70;
+  const alternatives = originalMeal?.alternatives ?? [];
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -101,10 +117,26 @@ export default function RecommendationScreen() {
             <Text style={[styles.mealName, { color: colors.foreground }]}>{meal.name}</Text>
             <Text style={[styles.cuisine, { color: colors.primary }]}>{meal.cuisine}</Text>
             <Text style={[styles.description, { color: colors.mutedForeground }]}>{meal.description}</Text>
+            {meal.chefReason ? (
+              <View style={[styles.chefReasonBox, { backgroundColor: colors.card + "CC" }]}>
+                <Ionicons name="restaurant-outline" size={14} color={colors.primary} />
+                <Text style={[styles.chefReasonText, { color: colors.foreground }]}>{meal.chefReason}</Text>
+              </View>
+            ) : null}
           </View>
         </LinearGradient>
 
         <View style={styles.body}>
+          {/* Low-confidence notice */}
+          {isLowConfidence && alternatives.length > 0 && (
+            <View style={[styles.lowConfidenceBox, { backgroundColor: colors.orangeLight, borderColor: colors.orange + "40" }]}>
+              <Ionicons name="information-circle-outline" size={18} color={colors.orange} />
+              <Text style={[styles.lowConfidenceText, { color: colors.orange }]}>
+                Pantry is a bit sparse — your chef picked the best option, but see alternatives below.
+              </Text>
+            </View>
+          )}
+
           {/* Ingredients */}
           <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Ingredients</Text>
@@ -142,6 +174,50 @@ export default function RecommendationScreen() {
               </View>
             )}
           </View>
+
+          {/* Alternatives (only shown when confidence < 70) */}
+          {isLowConfidence && alternatives.length > 0 && (
+            <View style={[styles.section, { backgroundColor: colors.card, borderColor: colors.border }]}>
+              <Text style={[styles.sectionTitle, { color: colors.foreground }]}>Your Chef's Alternatives</Text>
+              <Text style={[styles.altSubtitle, { color: colors.mutedForeground }]}>
+                Tap any option to switch to it
+              </Text>
+              {alternatives.map((alt, idx) => {
+                const isActive = meal.name === alt.name;
+                return (
+                  <Pressable
+                    key={idx}
+                    onPress={() => !isActive && switchToAlternative(alt)}
+                    style={[
+                      styles.altCard,
+                      {
+                        backgroundColor: isActive ? colors.sageLight : colors.background,
+                        borderColor: isActive ? colors.primary : colors.border,
+                      },
+                    ]}
+                  >
+                    <View style={styles.altCardTop}>
+                      <Text style={[styles.altName, { color: colors.foreground }]}>{alt.name}</Text>
+                      <View style={[styles.altTimeBadge, { backgroundColor: colors.muted }]}>
+                        <Ionicons name="time-outline" size={12} color={colors.mutedForeground} />
+                        <Text style={[styles.altTimeText, { color: colors.mutedForeground }]}>{alt.readyIn}m</Text>
+                      </View>
+                    </View>
+                    {alt.chefReason ? (
+                      <Text style={[styles.altReason, { color: colors.mutedForeground }]}>{alt.chefReason}</Text>
+                    ) : (
+                      <Text style={[styles.altReason, { color: colors.mutedForeground }]}>{alt.description}</Text>
+                    )}
+                    {alt.missingIngredients.length > 0 && (
+                      <Text style={[styles.altMissing, { color: colors.orange }]}>
+                        Needs: {alt.missingIngredients.slice(0, 3).join(", ")}
+                      </Text>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+          )}
 
           {/* YouTube */}
           {meal.youtubeVideoId ? (
@@ -268,6 +344,22 @@ const styles = StyleSheet.create({
     fontFamily: "Inter_400Regular",
     lineHeight: 23,
   },
+  chefReasonBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginTop: 4,
+  },
+  chefReasonText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    lineHeight: 19,
+    fontStyle: "italic",
+  },
   body: {
     padding: 20,
     gap: 16,
@@ -318,6 +410,64 @@ const styles = StyleSheet.create({
   },
   missingNoteText: {
     fontSize: 13,
+    fontFamily: "Inter_500Medium",
+  },
+  lowConfidenceBox: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+  },
+  lowConfidenceText: {
+    flex: 1,
+    fontSize: 13,
+    fontFamily: "Inter_500Medium",
+    lineHeight: 19,
+  },
+  altSubtitle: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    marginTop: -6,
+  },
+  altCard: {
+    borderRadius: 14,
+    borderWidth: 1,
+    padding: 14,
+    gap: 6,
+  },
+  altCardTop: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  altName: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: "Inter_600SemiBold",
+  },
+  altTimeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  altTimeText: {
+    fontSize: 12,
+    fontFamily: "Inter_500Medium",
+  },
+  altReason: {
+    fontSize: 13,
+    fontFamily: "Inter_400Regular",
+    lineHeight: 18,
+    fontStyle: "italic",
+  },
+  altMissing: {
+    fontSize: 12,
     fontFamily: "Inter_500Medium",
   },
   youtubeCard: {

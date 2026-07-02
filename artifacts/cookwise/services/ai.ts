@@ -6,8 +6,15 @@ const BASE_URL = `https://${process.env.EXPO_PUBLIC_DOMAIN}`;
 /** Timeout for all AI API calls (ms). LLM calls can be slow; 30s is generous. */
 const AI_TIMEOUT_MS = 30_000;
 
+export interface PantryItemForRecommend {
+  name: string;
+  expiryDate?: string;
+  daysUntilExpiry?: number;
+}
+
 export interface RecommendRequest {
   ingredients: string[];
+  pantryItems?: PantryItemForRecommend[];
   mood: Mood;
   recentMeals: string[];
   profile: UserProfile;

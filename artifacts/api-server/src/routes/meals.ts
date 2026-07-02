@@ -49,8 +49,15 @@ const MemorySnapshotSchema = z
 
 type MemorySnapshot = NonNullable<z.infer<typeof MemorySnapshotSchema>>;
 
+const PantryItemWithExpirySchema = z.object({
+  name: z.string().max(200),
+  expiryDate: z.string().optional(),
+  daysUntilExpiry: z.number().optional(),
+});
+
 const RecommendSchema = z.object({
   ingredients: z.array(z.string().max(200)).max(200).default([]),
+  pantryItems: z.array(PantryItemWithExpirySchema).max(200).default([]),
   mood: z.string().max(50).nullable().default(null),
   recentMeals: z.array(z.string().max(200)).max(50).default([]),
   profile: ProfileSchema.default({}),
@@ -476,79 +483,170 @@ router.post("/recommend", async (req, res, next) => {
     return;
   }
 
-  const { ingredients, mood, recentMeals, profile } = parsed.data as RecommendRequest;
+  const { ingredients, pantryItems, mood, recentMeals, profile, memory } = parsed.data as RecommendRequest;
 
-  const [weather] = await Promise.all([fetchWeatherContext()]);
+  const weather = await fetchWeatherContext();
 
   const moodCtx = mood ? MOOD_CONTEXT[mood] ?? null : null;
   const dayCtx = getDayOfWeekContext();
   const timeOfDay = getTimeOfDayContext();
   const familyCtx = getFamilySizeContext(profile.familySize);
-  const perishables = getPerishables(ingredients);
   const budgetMap = { low: "under $10 per meal", medium: "$10–25 per meal", high: "no budget constraint" };
   const budgetHint = budgetMap[profile.budget] ?? "$10–25 per meal";
 
-  const systemPrompt = `You are the user's personal AI Chef. You think like a thoughtful human chef who knows this person well: their energy, what's in their fridge, their family situation, their wallet, and what they've been eating all week. Your job is to make ONE confident dinner decision — not suggest options, not list ideas. Just pick the single best meal for this exact moment. Be decisive and specific.`;
+  // Build expiry-aware pantry list
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const expiryLines: string[] = [];
+  const expiringSoon: string[] = [];
 
-  const userPrompt = `Recommend ONE perfect dinner for tonight.
+  if (pantryItems.length > 0) {
+    for (const item of pantryItems) {
+      let days = item.daysUntilExpiry;
+      if (days === undefined && item.expiryDate) {
+        const exp = new Date(item.expiryDate);
+        exp.setHours(0, 0, 0, 0);
+        days = Math.round((exp.getTime() - today.getTime()) / 86_400_000);
+      }
+      if (days !== undefined) {
+        if (days < 0) {
+          expiryLines.push(`• ${item.name} — EXPIRED (discard or use with caution)`);
+        } else if (days === 0) {
+          expiryLines.push(`• ${item.name} — expires TODAY ⚠️`);
+          expiringSoon.push(item.name);
+        } else if (days <= 2) {
+          expiryLines.push(`• ${item.name} — expires in ${days} day${days > 1 ? "s" : ""} ⚠️ USE NOW`);
+          expiringSoon.push(item.name);
+        } else if (days <= 5) {
+          expiryLines.push(`• ${item.name} — expires in ${days} days`);
+        } else {
+          expiryLines.push(`• ${item.name}`);
+        }
+      } else {
+        expiryLines.push(`• ${item.name}`);
+      }
+    }
+  } else if (ingredients.length > 0) {
+    // Fallback to plain ingredient list when no expiry data
+    const perishables = getPerishables(ingredients);
+    for (const ing of ingredients) {
+      if (perishables.includes(ing)) {
+        expiryLines.push(`• ${ing} ⚠️ perishable — use soon`);
+        expiringSoon.push(ing);
+      } else {
+        expiryLines.push(`• ${ing}`);
+      }
+    }
+  }
 
-━━━ WHO I AM ━━━
-• Cooking for: ${familyCtx}
+  const allIngredientNames = pantryItems.length > 0
+    ? pantryItems.map((p) => p.name)
+    : ingredients;
+
+  // Family details from memory
+  const familyAllergies = memory?.familyAllergies ?? [];
+  const familyDislikes = memory?.familyDislikes ?? [];
+  const allAllergies = [...new Set([...profile.allergies, ...familyAllergies])];
+  const recentlyCooked = memory?.recentlyCooked ?? recentMeals;
+  const favoriteMeals = memory?.favoriteMealNames ?? [];
+  const staples = memory?.stapleIngredients ?? [];
+  const rareIngredients = memory?.rareIngredients ?? [];
+
+  const systemPrompt = `You are this family's personal chef — you know them inside out. You think like a seasoned human chef who has cooked for this household for years: you know their fridge, their schedule, their kids' fussiness, their budget, and exactly what they cooked last week. Your job is to make ONE decisive recommendation — the single best meal for this exact moment. You are confident, direct, and never hedge. You care deeply about using up food before it expires. You treat allergies as absolute rules. You balance every context signal (weather, time, day, mood, expiry urgency) into a single best answer. Only offer alternatives when you genuinely can't reach a confident recommendation (confidence below 70).`;
+
+  const userPrompt = `Decide the single best meal for right now. Act like their personal chef — confident and decisive.
+
+━━━ THE HOUSEHOLD ━━━
+• ${familyCtx}
 • Budget tonight: ${budgetHint}
-• Allergies / must avoid: ${profile.allergies.length > 0 ? profile.allergies.join(", ") : "none"}
+• Hard allergies (NEVER use): ${allAllergies.length > 0 ? allAllergies.join(", ") : "none"}
+• Family dislikes (avoid where possible): ${familyDislikes.length > 0 ? familyDislikes.join(", ") : "none"}
 • Cuisine preferences: ${profile.preferredCuisines.length > 0 ? profile.preferredCuisines.join(", ") : "open to anything"}
+${favoriteMeals.length > 0 ? `• Past favourites they love: ${favoriteMeals.slice(0, 5).join(", ")}` : ""}
+${staples.length > 0 ? `• Pantry staples (always available): ${staples.join(", ")}` : ""}
+${rareIngredients.length > 0 ? `• Rarely in stock (don't rely on): ${rareIngredients.join(", ")}` : ""}
 
-━━━ RIGHT NOW ━━━
+━━━ TIMING & DAY ━━━
 • Today: ${dayCtx.day} — ${dayCtx.effort}
 • Time of day: ${timeOfDay}
-• Cooking style for today: ${dayCtx.style}
+• Style for today: ${dayCtx.style}
 ${moodCtx
-  ? `• Tonight's mood: ${mood} — I'm ${moodCtx.vibe}\n• Energy I have: ${moodCtx.effort}\n• What I'm craving: ${moodCtx.style}`
-  : "• No particular mood — just hungry and open to a great meal"
+  ? `• Mood: ${mood} — ${moodCtx.vibe}\n• Energy available: ${moodCtx.effort}\n• Craving: ${moodCtx.style}`
+  : "• Mood: open — just hungry and ready for something great"
 }
 
-━━━ WEATHER ━━━
-${weather ? `• Current conditions: ${weather.summary}` : "• Weather unknown — choose something universally appealing"}
+━━━ WEATHER RIGHT NOW ━━━
+${weather ? `• ${weather.summary}` : "• Weather unavailable — choose something universally appealing"}
 
-━━━ MY PANTRY ━━━
-${ingredients.length > 0
-  ? `Available ingredients: ${ingredients.join(", ")}`
-  : "No pantry listed — assume basic staples: salt, pepper, olive oil, onion, garlic, eggs, butter, common dried spices, and standard dry goods"
+━━━ WHAT'S IN THE KITCHEN ━━━
+${expiryLines.length > 0
+  ? expiryLines.join("\n")
+  : "Nothing tracked — assume basic staples: salt, pepper, olive oil, onion, garlic, eggs, butter, dried spices, pasta, rice"
 }
-${perishables.length > 0
-  ? `\n⚠️  USE THESE FIRST (they spoil quickly): ${perishables.join(", ")}`
+${expiringSoon.length > 0
+  ? `\n🚨 EXPIRY PRIORITY — build the meal around these if at all possible: ${expiringSoon.join(", ")}`
   : ""
 }
 
-━━━ MEAL HISTORY (avoid repeating these) ━━━
-${recentMeals.length > 0
-  ? recentMeals.join(", ")
+━━━ RECENT MEALS (avoid repeating) ━━━
+${recentlyCooked.length > 0
+  ? recentlyCooked.slice(0, 7).join(", ")
   : "No history yet — anything goes"
 }
 
-━━━ YOUR DECISION RULES ━━━
-1. Pick ONE meal only. Be confident. No hedging.
-2. Prioritise perishable ingredients — they spoil soon.
-3. Match the weather: heavy/warming food when cold or rainy; light/fresh when hot.
-4. Respect the day: quick and simple on weeknights; more ambitious on weekends.
-5. Mood overrides day context — if they're tired, keep it under 25 min regardless of Saturday.
-6. Avoid repeating recent meals AND their cuisine types (add variety).
-7. Respect allergies absolutely — zero exceptions.
-8. If family size > 3, ensure the meal is easily scalable and crowd-pleasing.
-9. matchScore = your true confidence this is the right meal RIGHT NOW:
-   - 90–99: perfect — pantry match + mood + weather + preferences all aligned
-   - 75–89: great — most criteria met, 1–2 items to buy
-   - 60–74: acceptable — pantry is bare or some compromise needed
+━━━ CHEF DECISION RULES ━━━
+1. EXPIRY FIRST — ingredients expiring today or tomorrow must be used if a good meal can be built around them.
+2. ONE best meal — be decisive, no hedging.
+3. Weather match — cold/rainy → warming dishes; hot → light and fresh.
+4. Day rhythm — weeknights: fast and simple; weekends: more ambitious is fine.
+5. Mood overrides day — if mood is "tired", cap at 25 min regardless of the day.
+6. Avoid recent meals AND their cuisine types to ensure variety.
+7. Hard allergies are absolute — zero exceptions.
+8. Family size > 3 → meal must be scalable and crowd-pleasing.
+9. Budget is a firm ceiling — never recommend ingredients above it.
+10. Confidence = honest score of how perfectly this meal fits RIGHT NOW:
+    • 90–99 → perfect: expiry items used, pantry match, mood & weather aligned
+    • 70–89 → strong: most criteria met, ≤2 items to buy
+    • 50–69 → acceptable: sparse pantry or notable compromise
+    • <50 → poor fit: major constraint issue
 
-Respond with ONLY valid JSON, no markdown, no explanation:
+━━━ RESPONSE FORMAT ━━━
+Respond ONLY with valid JSON. No markdown, no explanation outside the JSON.
+
+When confidence ≥ 70 (leave "alternatives" as empty array):
 {
+  "confidence": 88,
   "name": "Meal Name",
-  "description": "One enticing, specific sentence (max 100 chars) — name a key flavour or technique",
+  "description": "One enticing sentence — mention a key flavour or technique (max 100 chars)",
   "cuisine": "Cuisine type",
   "readyIn": 30,
-  "matchScore": 94,
-  "ingredients": ["complete list of ingredients needed, 5–12 items"],
-  "missingIngredients": ["items from ingredients[] that are NOT in the pantry above"]
+  "chefReason": "One sentence — why THIS meal RIGHT NOW (mention the key deciding factor: expiry, weather, mood, etc.)",
+  "ingredients": ["complete list needed, 5–12 items"],
+  "missingIngredients": ["items from ingredients[] NOT in the kitchen above"],
+  "alternatives": []
+}
+
+When confidence < 70 (include 2–3 alternatives):
+{
+  "confidence": 58,
+  "name": "Best Available Meal",
+  "description": "...",
+  "cuisine": "...",
+  "readyIn": 25,
+  "chefReason": "Why this is the best option despite low confidence",
+  "ingredients": [...],
+  "missingIngredients": [...],
+  "alternatives": [
+    {
+      "name": "Alternative Meal 1",
+      "description": "...",
+      "cuisine": "...",
+      "readyIn": 20,
+      "chefReason": "Why this is a valid alternative",
+      "ingredients": [...],
+      "missingIngredients": [...]
+    }
+  ]
 }`;
 
   try {
@@ -559,35 +657,55 @@ Respond with ONLY valid JSON, no markdown, no explanation:
         { role: "system", content: systemPrompt },
         { role: "user", content: userPrompt },
       ],
-      max_tokens: 600,
-      temperature: 0.72,
+      max_tokens: 1200,
+      temperature: 0.65,
     });
 
     const raw = completion.choices[0]?.message?.content?.trim() ?? "";
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error("No JSON in response");
 
-    const parsed = JSON.parse(jsonMatch[0]);
-    const yt = await fetchYouTubeVideo(parsed.name);
+    const aiResp = JSON.parse(jsonMatch[0]);
+    const confidence = Math.min(99, Math.max(1, Number(aiResp.confidence) || 75));
+
+    const yt = await fetchYouTubeVideo(aiResp.name);
+
+    // Build alternatives when confidence < 70
+    const rawAlts: any[] = Array.isArray(aiResp.alternatives) ? aiResp.alternatives : [];
+    const alternatives = confidence < 70
+      ? rawAlts.slice(0, 3).map((alt: any) => ({
+          id: generateId(),
+          name: alt.name ?? "Alternative",
+          description: alt.description ?? "",
+          cuisine: alt.cuisine ?? "International",
+          readyIn: Number(alt.readyIn) || 30,
+          matchScore: Math.min(99, Math.max(40, confidence - 5 + Math.floor(Math.random() * 10))),
+          chefReason: alt.chefReason ?? "",
+          ingredients: Array.isArray(alt.ingredients) ? alt.ingredients : [],
+          missingIngredients: Array.isArray(alt.missingIngredients) ? alt.missingIngredients : [],
+          mood: mood ?? undefined,
+        }))
+      : [];
 
     const meal = {
       id: generateId(),
-      name: parsed.name,
-      description: parsed.description,
-      cuisine: parsed.cuisine,
-      readyIn: Number(parsed.readyIn) || 30,
-      matchScore: Math.min(99, Math.max(60, Number(parsed.matchScore) || 85)),
-      ingredients: Array.isArray(parsed.ingredients) ? parsed.ingredients : [],
-      missingIngredients: Array.isArray(parsed.missingIngredients) ? parsed.missingIngredients : [],
+      name: aiResp.name,
+      description: aiResp.description,
+      cuisine: aiResp.cuisine,
+      readyIn: Number(aiResp.readyIn) || 30,
+      matchScore: confidence,
+      chefReason: aiResp.chefReason ?? "",
+      ingredients: Array.isArray(aiResp.ingredients) ? aiResp.ingredients : [],
+      missingIngredients: Array.isArray(aiResp.missingIngredients) ? aiResp.missingIngredients : [],
       mood: mood ?? undefined,
+      alternatives: alternatives.length > 0 ? alternatives : undefined,
       ...yt,
     };
 
     res.json(meal);
   } catch (err) {
-    // Graceful fallback — weather-aware, pantry-scored
     try {
-      const fallback = getFallbackMeal(mood, profile.allergies, ingredients, weather ?? null);
+      const fallback = getFallbackMeal(mood, profile.allergies, allIngredientNames, weather ?? null);
       const yt = await fetchYouTubeVideo(fallback.name);
       res.json({ ...fallback, ...yt });
     } catch (fallbackErr) {
