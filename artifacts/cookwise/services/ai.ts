@@ -1,4 +1,5 @@
 import type { Meal, Mood, UserProfile } from "@/types";
+import { memoryRepository } from "./KitchenMemoryRepository";
 
 const BASE_URL = `https://${process.env.EXPO_PUBLIC_DOMAIN}`;
 
@@ -32,6 +33,12 @@ async function fetchWithTimeout(
 }
 
 export async function getRecommendation(req: RecommendRequest): Promise<Meal> {
+  // Load kitchen memory and attach it to the request so the API server can
+  // personalise the prompt. Fails silently — the AI still works without it.
+  const memory = await memoryRepository
+    .buildSnapshot(req.profile.budget)
+    .catch(() => null);
+
   let res: Response;
   try {
     res = await fetchWithTimeout(
@@ -39,7 +46,7 @@ export async function getRecommendation(req: RecommendRequest): Promise<Meal> {
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(req),
+        body: JSON.stringify({ ...req, memory }),
       },
       AI_TIMEOUT_MS,
     );
@@ -63,6 +70,11 @@ export async function getWeeklyPlan(
   profile: UserProfile,
   recentMeals: string[],
 ): Promise<Meal[]> {
+  // Attach kitchen memory so the weekly planner has full household context.
+  const memory = await memoryRepository
+    .buildSnapshot(profile.budget)
+    .catch(() => null);
+
   let res: Response;
   try {
     res = await fetchWithTimeout(
@@ -70,7 +82,7 @@ export async function getWeeklyPlan(
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pantryItems, profile, recentMeals }),
+        body: JSON.stringify({ pantryItems, profile, recentMeals, memory }),
       },
       AI_TIMEOUT_MS,
     );
