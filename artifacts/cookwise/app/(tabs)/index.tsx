@@ -62,6 +62,8 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const ctaScale = useSharedValue(1);
+  // Guard against React Strict Mode double-invoking the mount effect.
+  const didFetchRef = React.useRef(false);
 
   const fetchRecommendation = useCallback(async () => {
     setIsLoadingRecommendation(true);
@@ -84,6 +86,10 @@ export default function HomeScreen() {
   }, [pantryItems, selectedMood, mealHistory, profile, setTonightsMeal, setIsLoadingRecommendation]);
 
   useEffect(() => {
+    // didFetchRef prevents React Strict Mode's double-invocation from firing
+    // two concurrent OpenAI requests on mount.
+    if (didFetchRef.current) return;
+    didFetchRef.current = true;
     if (!tonightsMeal && !isLoadingRecommendation) {
       fetchRecommendation();
     }

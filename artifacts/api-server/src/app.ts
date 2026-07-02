@@ -14,8 +14,21 @@ const app: Express = express();
 // instead of collapsing all users to the same proxy address.
 app.set("trust proxy", 1);
 
+// ── CORS ──────────────────────────────────────────────────────────────────────
+// Must come before helmet so CORS headers are present on all responses,
+// including preflight OPTIONS. helmet's crossOriginResourcePolicy would
+// otherwise block cross-origin fetches from the Expo web client.
+app.use(cors());
+
 // ── Security headers ──────────────────────────────────────────────────────────
-app.use(helmet());
+app.use(
+  helmet({
+    // Allow cross-origin fetches (Expo web app is on a different subdomain).
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+    // CSP disabled for the API — it serves JSON, not HTML pages.
+    contentSecurityPolicy: false,
+  }),
+);
 
 // ── Request logging ───────────────────────────────────────────────────────────
 app.use(
@@ -37,10 +50,6 @@ app.use(
     },
   }),
 );
-
-// ── CORS ──────────────────────────────────────────────────────────────────────
-// Mobile apps bypass CORS; wildcard is safe. Restrict if a web origin is added.
-app.use(cors());
 
 // ── Body parsing ──────────────────────────────────────────────────────────────
 app.use(express.json({ limit: "100kb" }));
