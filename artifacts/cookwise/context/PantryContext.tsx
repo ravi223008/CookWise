@@ -9,11 +9,15 @@ import React, {
 
 import { KEYS, load, save } from "@/services/storage";
 import type { PantryItem } from "@/types";
+import { getDaysUntilExpiry, isLowStock } from "@/utils/pantry";
 
 interface PantryState {
   items: PantryItem[];
   isLoading: boolean;
-  addItem: (name: string, quantity?: string) => void;
+  expiringItems: PantryItem[];
+  lowStockItems: PantryItem[];
+  addItem: (name: string, quantity?: string, expiryDate?: string) => void;
+  updateItem: (id: string, updates: Partial<Omit<PantryItem, "id" | "addedAt">>) => void;
   removeItem: (id: string) => void;
   clearAll: () => void;
 }
@@ -35,7 +39,7 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  const addItem = useCallback((name: string, quantity?: string) => {
+  const addItem = useCallback((name: string, quantity?: string, expiryDate?: string) => {
     const trimmed = name.trim();
     if (!trimmed) return;
     setItems((prev) => {
@@ -45,8 +49,24 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
       if (alreadyExists) return prev;
       const next = [
         ...prev,
-        { id: generateId(), name: trimmed, quantity, addedAt: new Date().toISOString() },
+        {
+          id: generateId(),
+          name: trimmed,
+          quantity,
+          expiryDate,
+          addedAt: new Date().toISOString(),
+        },
       ];
+      save(KEYS.PANTRY, next);
+      return next;
+    });
+  }, []);
+
+  const updateItem = useCallback((id: string, updates: Partial<Omit<PantryItem, "id" | "addedAt">>) => {
+    setItems((prev) => {
+      const next = prev.map((item) =>
+        item.id === id ? { ...item, ...updates } : item
+      );
       save(KEYS.PANTRY, next);
       return next;
     });
@@ -65,9 +85,23 @@ export function PantryProvider({ children }: { children: React.ReactNode }) {
     save(KEYS.PANTRY, []);
   }, []);
 
+  const expiringItems = useMemo(
+    () =>
+      items.filter((item) => {
+        const days = getDaysUntilExpiry(item.expiryDate);
+        return days !== null && days <= 3;
+      }),
+    [items]
+  );
+
+  const lowStockItems = useMemo(
+    () => items.filter((item) => isLowStock(item.quantity)),
+    [items]
+  );
+
   const value = useMemo(
-    () => ({ items, isLoading, addItem, removeItem, clearAll }),
-    [items, isLoading, addItem, removeItem, clearAll]
+    () => ({ items, isLoading, expiringItems, lowStockItems, addItem, updateItem, removeItem, clearAll }),
+    [items, isLoading, expiringItems, lowStockItems, addItem, updateItem, removeItem, clearAll]
   );
 
   return (
